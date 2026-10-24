@@ -2,32 +2,84 @@ import { useState, useEffect, useRef } from 'react';
 import { Save, Store, AlertCircle, CheckCircle, Camera, Image as ImageIcon } from 'lucide-react';
 import api from '../../api/axios';
 
-const MAX_IMAGE_MB = 5;
+const MAX_PICK_MB = 15; // reject only absurdly large originals; everything else is shrunk first
+const UPLOAD_TIMEOUT_MS = 120000;
 
-// text-base on phones stops iOS Safari zooming into focused inputs; text-sm from sm up
 const inputClass =
   'w-full px-4 py-3 border border-gray-300 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:border-[#25D366] transition-colors';
 
-const StoreManager = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    slug: '',
-    description: '',
-    whatsappNumber: '',
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Shrinks a photo in the browser so uploads are small and fast on slow mobile data.
+// Falls back to the original file if anything goes wrong.
+const compressImage = (file, maxSide, quality = 0.82) =>
+  new Promise((resolve) => {
+    if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.type === 'image/svg+xml') {
+      return resolve(file);
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      if (scale === 1 && file.size < 300 * 1024) return resolve(file); // already small
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // JPEGs stay JPEG; PNGs become WebP so logo transparency is kept
+      const outType = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/webp';
+      canvas.toBlob(
+        (blob) => {
+          if (!blob || blob.size >= file.size) return resolve(file);
+          const ext = blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/webp' ? 'webp' : 'png';
+          const name = file.name.replace(/\.[^.]+$/, '') + '.' + ext;
+          resolve(new File([blob], name, { type: blob.type }));
+        },
+        outType,
+        quality
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
   });
+
+const describeError = (error) => {
+  if (error.response) {
+    return (
+      error.response.data?.error ||
+      error.response.data?.message ||
+      `Save failed (error ${error.response.status}). Please try again.`
+    );
+  }
+  if (error.code === 'ECONNABORTED') {
+    return 'The upload took too long and timed out. Try again on a stronger connection.';
+  }
+  return 'Could not reach the server. It may be waking up (this can take up to a minute) or your connection dropped. Please try again.';
+};
+
+const StoreManager = () => {
+  const [formData, setFormData] = useState({ name: '', slug: '', description: '', whatsappNumber: '' });
 
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState('');
-
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
 
   const [hasStore, setHasStore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Track local preview URLs so they can be released
   const objectUrls = useRef([]);
 
   useEffect(() => {
@@ -49,7 +101,7 @@ const StoreManager = () => {
       } catch (error) {
         if (error.response?.status !== 404) {
           console.error('Error fetching store:', error);
-          setMessage({ type: 'error', text: 'Could not load your store details.' });
+          setMessage({ type: 'error', text: 'Could not load your store details. Pull down to refresh and try again.' });
         }
       } finally {
         setLoading(false);
@@ -60,21 +112,27 @@ const StoreManager = () => {
     return () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
+  // The dashboard scrolls inside its own container, so scroll both it and the window
   const showMessage = (type, text) => {
     setMessage({ type, text });
+    document.getElementById('dashboard-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const pickImage = (e, setFile, setPreview) => {
-    const file = e.target.files[0];
-    e.target.value = ''; // lets the same file be chosen again
-    if (!file) return;
+  const pickImage = async (e, setFile, setPreview, maxSide) => {
+    const original = e.target.files[0];
+    e.target.value = '';
+    if (!original) return;
 
-    if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
-      return showMessage('error', `That image is too large. Please choose one under ${MAX_IMAGE_MB}MB.`);
+    if (original.size > MAX_PICK_MB * 1024 * 1024) {
+      return showMessage('error', `That image is too large. Please choose one under ${MAX_PICK_MB}MB.`);
     }
+
+    setPreparing(true);
+    const file = await compressImage(original, maxSide);
+    setPreparing(false);
 
     const url = URL.createObjectURL(file);
     objectUrls.current.push(url);
@@ -82,11 +140,7 @@ const StoreManager = () => {
     setPreview(url);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setMessage({ type: '', text: '' });
-
+  const buildFormData = () => {
     const submitData = new FormData();
     submitData.append('name', formData.name.trim());
     submitData.append('slug', formData.slug.trim());
@@ -94,11 +148,44 @@ const StoreManager = () => {
     submitData.append('whatsappNumber', formData.whatsappNumber.trim());
     if (logoFile) submitData.append('logo', logoFile);
     if (coverFile) submitData.append('coverImage', coverFile);
+    return submitData;
+  };
+
+  const sendRequest = () => {
+    const config = {
+      timeout: UPLOAD_TIMEOUT_MS,
+      onUploadProgress: (e) => {
+        if (e.total) setProgress(Math.round((e.loaded * 100) / e.total));
+      },
+    };
+    const body = buildFormData();
+    return hasStore ? api.put('/stores/my-store', body, config) : api.post('/stores', body, config);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (preparing) return;
+    setSaving(true);
+    setProgress(0);
+    setStatusText('');
+    setMessage({ type: '', text: '' });
 
     try {
-      const res = hasStore
-        ? await api.put('/stores/my-store', submitData)
-        : await api.post('/stores', submitData);
+      let res;
+      try {
+        res = await sendRequest();
+      } catch (firstError) {
+        // Retry once if nothing came back (sleeping server or dropped connection).
+        // Only for updates: repeating a create could duplicate the store.
+        if (hasStore && !firstError.response) {
+          setStatusText('Connection hiccup. Retrying...');
+          await sleep(4000);
+          setProgress(0);
+          res = await sendRequest();
+        } else {
+          throw firstError;
+        }
+      }
 
       const saved = res.data?.data?.store;
       if (saved?.logo?.url) setLogoPreview(saved.logo.url);
@@ -107,16 +194,14 @@ const StoreManager = () => {
 
       setLogoFile(null);
       setCoverFile(null);
-      setHasStore(true);
       showMessage('success', hasStore ? 'Store updated successfully!' : 'Store created successfully!');
+      setHasStore(true);
     } catch (error) {
-      const serverMsg = error.response?.data?.error || error.response?.data?.message;
-      showMessage(
-        'error',
-        serverMsg || (error.response ? 'Failed to save store details.' : 'Cannot reach the server. Check your connection.')
-      );
+      console.error('Save store failed:', error.response?.status, error.response?.data, error.code, error.message);
+      showMessage('error', describeError(error));
     } finally {
       setSaving(false);
+      setStatusText('');
     }
   };
 
@@ -129,8 +214,10 @@ const StoreManager = () => {
     );
   }
 
+  const hasNewImages = Boolean(logoFile || coverFile);
+
   return (
-    <div className="max-w-3xl mx-auto md:mx-0 pb-8">
+    <div className="max-w-3xl mx-auto pb-8">
       <div className="mb-6 sm:mb-8">
         <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
           <Store className="w-6 h-6 mr-2 text-[#128C7E] flex-shrink-0" />
@@ -175,11 +262,9 @@ const StoreManager = () => {
                 <span className="text-sm">Tap to upload banner (optional)</span>
               </div>
             )}
-            {/* Hover overlay (desktop) */}
             <div className="absolute inset-0 bg-black/40 hidden sm:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera className="w-8 h-8 text-white" />
             </div>
-            {/* Always-visible badge (touch devices have no hover) */}
             {coverPreview && (
               <span className="sm:hidden absolute bottom-2 right-2 bg-black/60 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1">
                 <Camera className="w-3.5 h-3.5" /> Change
@@ -189,11 +274,13 @@ const StoreManager = () => {
               type="file"
               accept="image/*"
               aria-label="Upload store banner"
-              onChange={(e) => pickImage(e, setCoverFile, setCoverPreview)}
+              onChange={(e) => pickImage(e, setCoverFile, setCoverPreview, 1600)}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
           </div>
-          <p className="text-xs text-gray-400 mt-2">Wide images work best (for example 1500 x 500). Up to {MAX_IMAGE_MB}MB.</p>
+          <p className="text-xs text-gray-400 mt-2">
+            Wide images work best. Photos are shrunk automatically so they upload quickly.
+          </p>
         </div>
 
         {/* Logo */}
@@ -212,11 +299,10 @@ const StoreManager = () => {
                 type="file"
                 accept="image/*"
                 aria-label="Upload brand logo"
-                onChange={(e) => pickImage(e, setLogoFile, setLogoPreview)}
+                onChange={(e) => pickImage(e, setLogoFile, setLogoPreview, 800)}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </div>
-            {/* Badge sits outside the clipped circle and is always visible */}
             <span className="sm:hidden absolute -bottom-1 -right-1 bg-[#128C7E] text-white p-1.5 rounded-full shadow pointer-events-none">
               <Camera className="w-3.5 h-3.5" />
             </span>
@@ -224,7 +310,7 @@ const StoreManager = () => {
           <div className="min-w-0">
             <h3 className="font-bold text-gray-900">Brand Logo</h3>
             <p className="text-sm text-gray-500 mt-1">Upload your business logo. Recommended size: 500x500px.</p>
-            <p className="text-xs text-gray-400 mt-1">JPG, PNG, or WEBP. Up to {MAX_IMAGE_MB}MB.</p>
+            <p className="text-xs text-gray-400 mt-1">JPG, PNG, or WEBP.</p>
           </div>
         </div>
 
@@ -246,7 +332,6 @@ const StoreManager = () => {
           </div>
           <div className="min-w-0">
             <label htmlFor="slug" className="block text-sm font-semibold text-gray-700 mb-1">Store URL (Slug)</label>
-            {/* Stacked on phones so a long domain never squeezes the input; side by side from sm up */}
             <div className="flex flex-col sm:flex-row rounded-xl shadow-sm overflow-hidden border border-gray-300 focus-within:ring-2 focus-within:ring-[#25D366] focus-within:border-[#25D366]">
               <span className="px-3 py-2 sm:py-0 sm:flex sm:items-center bg-gray-50 text-gray-500 text-xs sm:text-sm border-b sm:border-b-0 sm:border-r border-gray-300 truncate sm:max-w-[55%]">
                 {window.location.host}/store/
@@ -299,15 +384,33 @@ const StoreManager = () => {
           <p className="text-xs text-gray-400 mt-1 text-right">{formData.description.length}/500</p>
         </div>
 
-        <div className="pt-4 border-t border-gray-100 flex sm:justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full sm:w-auto flex items-center justify-center px-6 py-3.5 sm:py-3 bg-[#128C7E] text-white font-bold rounded-xl hover:bg-[#075E54] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            <Save className="w-5 h-5 mr-2" />
-            {saving ? 'Saving...' : hasStore ? 'Save Store Details' : 'Create Store'}
-          </button>
+        <div className="pt-4 border-t border-gray-100 space-y-3">
+          {saving && hasNewImages && (
+            <div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#25D366] transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              <p className="text-xs text-gray-500 mt-1.5">{statusText || `Uploading images... ${progress}%`}</p>
+            </div>
+          )}
+          {saving && !hasNewImages && statusText && <p className="text-xs text-gray-500">{statusText}</p>}
+
+          <div className="flex sm:justify-end">
+            <button
+              type="submit"
+              disabled={saving || preparing}
+              className="w-full sm:w-auto flex items-center justify-center px-6 py-3.5 sm:py-3 bg-[#128C7E] text-white font-bold rounded-xl hover:bg-[#075E54] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <Save className="w-5 h-5 mr-2" />
+              {preparing
+                ? 'Preparing image...'
+                : saving
+                  ? 'Saving...'
+                  : hasStore
+                    ? 'Save Store Details'
+                    : 'Create Store'}
+            </button>
+          </div>
         </div>
       </form>
     </div>
