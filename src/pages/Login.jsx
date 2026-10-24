@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Store, LogIn, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Store, LogIn, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import api from '../api/axios';
 
-// text-base on phones stops iOS Safari zooming in when an input is focused;
-// it drops to text-sm from the sm breakpoint up.
 const inputClass =
   'appearance-none block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:border-[#25D366] text-base sm:text-sm transition-colors';
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const passwordReset = Boolean(location.state?.passwordReset);
+
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -63,6 +64,13 @@ const Login = () => {
       <div className="mt-6 sm:mt-8 mx-auto w-full max-w-md">
         <div className="bg-white py-6 px-5 sm:py-8 sm:px-10 shadow-xl border border-emerald-50 rounded-2xl">
 
+          {passwordReset && !error && (
+            <div role="status" className="mb-4 bg-emerald-50 border border-emerald-100 p-3 sm:p-4 flex items-start rounded-xl">
+              <CheckCircle className="w-5 h-5 text-emerald-600 mr-2 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-emerald-800">Your password was updated. Log in with your new password.</p>
+            </div>
+          )}
+
           {error && (
             <div role="alert" className="mb-4 bg-red-50 border-l-4 border-red-500 p-3 sm:p-4 flex items-start rounded-r-lg">
               <AlertCircle className="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
@@ -90,7 +98,12 @@ const Login = () => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700">Password</label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="block text-sm font-semibold text-gray-700">Password</label>
+                <Link to="/forgot-password" className="text-sm font-medium text-[#128C7E] hover:text-[#075E54]">
+                  Forgot password?
+                </Link>
+              </div>
               <div className="mt-1 relative">
                 <input
                   id="password"
