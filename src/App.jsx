@@ -10,6 +10,8 @@ import Dashboard from './pages/Dashboard';
 import Storefront from './pages/Storefront';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminLogin from './pages/admin/AdminLogin';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   return (
@@ -36,6 +38,8 @@ function App() {
           {/* Note: We will add a PrivateRoute wrapper here later to protect this */}
           <Route path="/dashboard/*" element={<Dashboard />} />
           <Route path="/admin/*" element={<AdminDashboard />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+<Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* =========================================
               PUBLIC CUSTOMER STOREFRONTS
