@@ -1,5 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Store, AlertCircle, CheckCircle, Camera, Image as ImageIcon } from 'lucide-react';
+import {
+  Save,
+  Store,
+  AlertCircle,
+  CheckCircle,
+  Camera,
+  Image as ImageIcon,
+  Copy,
+  Check,
+  ExternalLink,
+  MessageCircle,
+} from 'lucide-react';
 import api from '../../api/axios';
 
 const MAX_PICK_MB = 15; // reject only absurdly large originals; everything else is shrunk first
@@ -9,6 +20,33 @@ const inputClass =
   'w-full px-4 py-3 border border-gray-300 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:border-[#25D366] transition-colors';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Clipboard API needs HTTPS; fall back to the old method elsewhere
+const copyToClipboard = async (text) => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to the legacy approach
+  }
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return ok;
+  } catch {
+    return false;
+  }
+};
 
 // Shrinks a photo in the browser so uploads are small and fast on slow mobile data.
 // Falls back to the original file if anything goes wrong.
@@ -66,6 +104,7 @@ const describeError = (error) => {
 
 const StoreManager = () => {
   const [formData, setFormData] = useState({ name: '', slug: '', description: '', whatsappNumber: '' });
+  const [savedSlug, setSavedSlug] = useState(''); // the slug that is actually live on the server
 
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState('');
@@ -79,8 +118,13 @@ const StoreManager = () => {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [copyState, setCopyState] = useState('idle'); // idle | copied | failed
 
   const objectUrls = useRef([]);
+  const copyTimer = useRef(null);
+
+  const storeUrl = savedSlug ? `${window.location.origin}/store/${savedSlug}` : '';
+  const slugChanged = hasStore && savedSlug && formData.slug.trim() !== savedSlug;
 
   useEffect(() => {
     const fetchMyStore = async () => {
@@ -94,6 +138,7 @@ const StoreManager = () => {
             description: store.description || '',
             whatsappNumber: store.whatsappNumber || '',
           });
+          setSavedSlug(store.slug || '');
           if (store.logo?.url) setLogoPreview(store.logo.url);
           if (store.coverImage?.url) setCoverPreview(store.coverImage.url);
           setHasStore(true);
@@ -109,7 +154,10 @@ const StoreManager = () => {
     };
     fetchMyStore();
 
-    return () => objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    return () => {
+      objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      clearTimeout(copyTimer.current);
+    };
   }, []);
 
   // The dashboard scrolls inside its own container, so scroll both it and the window
@@ -120,6 +168,19 @@ const StoreManager = () => {
   };
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(storeUrl);
+    setCopyState(ok ? 'copied' : 'failed');
+    clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopyState('idle'), 2500);
+  };
+
+  const handleWhatsAppShare = () => {
+    const name = formData.name.trim() || 'my store';
+    const text = `Shop at ${name} on Vendira. Browse everything and order straight on WhatsApp:\n${storeUrl}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  };
 
   const pickImage = async (e, setFile, setPreview, maxSide) => {
     const original = e.target.files[0];
@@ -190,7 +251,10 @@ const StoreManager = () => {
       const saved = res.data?.data?.store;
       if (saved?.logo?.url) setLogoPreview(saved.logo.url);
       if (saved?.coverImage?.url) setCoverPreview(saved.coverImage.url);
-      if (saved?.slug) setFormData((prev) => ({ ...prev, slug: saved.slug }));
+      if (saved?.slug) {
+        setFormData((prev) => ({ ...prev, slug: saved.slug }));
+        setSavedSlug(saved.slug);
+      }
 
       setLogoFile(null);
       setCoverFile(null);
@@ -243,6 +307,68 @@ const StoreManager = () => {
             <CheckCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
           )}
           <span className="text-sm font-medium break-words min-w-0">{message.text}</span>
+        </div>
+      )}
+
+      {/* YOUR STORE LINK */}
+      {storeUrl && (
+        <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6">
+          <h3 className="font-bold text-gray-900">Your store link</h3>
+          <p className="text-sm text-gray-500 mt-0.5 mb-3">Share this with your customers, or put it in your bio and WhatsApp status.</p>
+
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            <input
+              type="text"
+              readOnly
+              value={storeUrl}
+              aria-label="Your store link"
+              onFocus={(e) => e.target.select()}
+              className="flex-1 min-w-0 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-base sm:text-sm text-gray-700 font-mono truncate focus:outline-none focus:ring-2 focus:ring-[#25D366]"
+            />
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={`flex items-center justify-center px-5 py-3 rounded-xl font-bold text-sm transition-colors sm:w-36 ${
+                copyState === 'copied'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : copyState === 'failed'
+                    ? 'bg-red-50 text-red-600'
+                    : 'bg-gray-900 hover:bg-gray-800 text-white'
+              }`}
+            >
+              {copyState === 'copied' ? (
+                <><Check className="w-4 h-4 mr-2" /> Copied!</>
+              ) : copyState === 'failed' ? (
+                'Copy manually'
+              ) : (
+                <><Copy className="w-4 h-4 mr-2" /> Copy link</>
+              )}
+            </button>
+          </div>
+
+          {copyState === 'failed' && (
+            <p className="text-xs text-red-600 mt-2">
+              Your browser blocked copying. Tap the link above, select all, and copy it.
+            </p>
+          )}
+
+          <div className="mt-2 sm:mt-3 grid grid-cols-2 sm:flex gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={handleWhatsAppShare}
+              className="flex items-center justify-center px-4 sm:px-5 py-3 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold rounded-xl text-sm transition-colors"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+            </button>
+            <a
+              href={storeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center px-4 sm:px-5 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold rounded-xl text-sm transition-colors"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" /> Open store
+            </a>
+          </div>
         </div>
       )}
 
@@ -350,6 +476,11 @@ const StoreManager = () => {
                 placeholder="my-gadget-hub"
               />
             </div>
+            {slugChanged && (
+              <p className="text-xs text-amber-600 mt-1.5">
+                Changing your URL breaks any links you've already shared. Customers using the old link will see "Store not found".
+              </p>
+            )}
           </div>
         </div>
 
