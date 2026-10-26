@@ -10,6 +10,7 @@ import {
   X,
   Settings,
   MessageSquare,
+  Video,
 } from 'lucide-react';
 import api from '../../api/axios';
 
