@@ -18,6 +18,7 @@ import ManageVendors from './ManageVendors';
 import ManageStores from './ManageStores';
 import ManageFeedback from './ManageFeedback';
 import SystemSettings from './SystemSettings';
+import ManageGuide from './ManageGuide';
 
 const adminLinks = [
   { name: 'Platform Overview', path: '/admin', icon: Activity },
@@ -25,6 +26,8 @@ const adminLinks = [
   { name: 'All Stores', path: '/admin/stores', icon: Store },
   { name: 'Feedback', path: '/admin/feedback', icon: MessageSquare },
   { name: 'System Settings', path: '/admin/settings', icon: Settings },
+  // in adminLinks, after Feedback:
+{ name: 'Welcome & Tutorials', path: '/admin/guide', icon: Video },
 ];
 
 const AdminDashboard = () => {
@@ -220,6 +223,7 @@ const AdminDashboard = () => {
             <Route path="/stores" element={<ManageStores />} />
             <Route path="/feedback" element={<ManageFeedback />} />
             <Route path="/settings" element={<SystemSettings />} />
+            <Route path="/guide" element={<ManageGuide />} />
           </Routes>
         </div>
       </main>
