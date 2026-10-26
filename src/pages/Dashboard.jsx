@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Tags,
   Star,
+  PlayCircle,   // <- add this
 } from 'lucide-react';
 
 import StoreManager from './dashboard/StoreManager';
