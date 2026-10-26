@@ -10,6 +10,7 @@ import {
   X,
   MessageSquare,
   Tags,
+  Star,
 } from 'lucide-react';
 
 import StoreManager from './dashboard/StoreManager';
@@ -18,6 +19,7 @@ import Reviews from './dashboard/Reviews';
 import Overview from './dashboard/Overview';
 import Settings from './dashboard/Settings';
 import CategoryManager from './dashboard/CategoryManager';
+import SiteFeedback from './dashboard/SiteFeedback';
 
 const navLinks = [
   { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
@@ -25,6 +27,7 @@ const navLinks = [
   { name: 'Categories', path: '/dashboard/categories', icon: Tags },
   { name: 'Products', path: '/dashboard/products', icon: Package },
   { name: 'Reviews', path: '/dashboard/reviews', icon: MessageSquare },
+  { name: 'Feedback', path: '/dashboard/feedback', icon: Star },
   { name: 'Settings', path: '/dashboard/settings', icon: SettingsIcon },
 ];
 
@@ -59,6 +62,11 @@ const Dashboard = () => {
       document.body.style.overflow = previousOverflow;
     };
   }, [isSidebarOpen]);
+
+  // Start each page at the top when navigating between dashboard sections
+  useEffect(() => {
+    document.getElementById('dashboard-scroll')?.scrollTo({ top: 0 });
+  }, [location.pathname]);
 
   const handleLogout = () => {
     localStorage.removeItem('vendira_token');
@@ -144,13 +152,15 @@ const Dashboard = () => {
           <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{pageTitle}</h1>
         </header>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+        {/* id lets pages scroll their success/error banners into view */}
+        <div id="dashboard-scroll" className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/store" element={<StoreManager />} />
             <Route path="/categories" element={<CategoryManager />} />
             <Route path="/products" element={<ProductManager />} />
             <Route path="/reviews" element={<Reviews />} />
+            <Route path="/feedback" element={<SiteFeedback />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </div>
