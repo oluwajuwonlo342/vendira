@@ -12,6 +12,8 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminLogin from './pages/admin/AdminLogin';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import TutorialVideo from './components/TutorialVideo';
+
 
 function App() {
   return (
@@ -39,6 +41,7 @@ function App() {
           <Route path="/dashboard/*" element={<Dashboard />} />
           <Route path="/admin/*" element={<AdminDashboard />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/tutorial-video" element={<TutorialVideo />} />
 <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* =========================================
