@@ -12,6 +12,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import api from '../../api/axios';
+import EmptyState from '../../components/EmptyState';
 
 const MAX_PICK_MB = 15; // reject only absurdly large originals; everything else is shrunk first
 const UPLOAD_TIMEOUT_MS = 120000;
@@ -113,6 +114,8 @@ const StoreManager = () => {
 
   const [hasStore, setHasStore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -144,21 +147,31 @@ const StoreManager = () => {
           setHasStore(true);
         }
       } catch (error) {
+        // 404 means "no store yet". Anything else is a real failure, so don't show the
+        // "set up your store" screen, which could lead to creating a duplicate store.
         if (error.response?.status !== 404) {
           console.error('Error fetching store:', error);
-          setMessage({ type: 'error', text: 'Could not load your store details. Pull down to refresh and try again.' });
+          setLoadFailed(true);
         }
       } finally {
         setLoading(false);
       }
     };
     fetchMyStore();
+  }, [attempt]);
 
+  useEffect(() => {
     return () => {
       objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
       clearTimeout(copyTimer.current);
     };
   }, []);
+
+  const retryLoad = () => {
+    setLoadFailed(false);
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  };
 
   // The dashboard scrolls inside its own container, so scroll both it and the window
   const showMessage = (type, text) => {
@@ -275,6 +288,36 @@ const StoreManager = () => {
         <div className="h-8 bg-gray-200 rounded w-1/2"></div>
         <div className="h-96 bg-gray-200 rounded-2xl w-full"></div>
       </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="max-w-3xl mx-auto text-center bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+        <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+        <p className="text-gray-700 font-semibold">Could not load your store details.</p>
+        <p className="text-sm text-gray-500 mt-1">The server may be waking up or your connection dropped.</p>
+        <button
+          type="button"
+          onClick={retryLoad}
+          className="mt-5 px-6 py-3 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl text-sm transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  // Vendors without a store are guided through setup instead of seeing this form
+  if (!hasStore) {
+    return (
+      <EmptyState
+        icon={Store}
+        title="You haven't set up your store yet"
+        description="We'll guide you step by step. It takes about 3 minutes and your progress is saved as you go."
+        actionLabel="Start store setup"
+        to="/dashboard/setup"
+      />
     );
   }
 
@@ -537,9 +580,7 @@ const StoreManager = () => {
                 ? 'Preparing image...'
                 : saving
                   ? 'Saving...'
-                  : hasStore
-                    ? 'Save Store Details'
-                    : 'Create Store'}
+                  : 'Save Store Details'}
             </button>
           </div>
         </div>
