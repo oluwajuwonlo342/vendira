@@ -12,8 +12,12 @@ import {
   Check,
   Share2,
   MessageCircle,
+  PlayCircle,
+  X,
 } from 'lucide-react';
 import api from '../../api/axios';
+
+const HELP_DISMISSED_KEY = 'vendira_help_popup_dismissed';
 
 // Clipboard API needs HTTPS; fall back to the old method elsewhere (e.g. plain http on a LAN)
 const copyToClipboard = async (text) => {
@@ -42,6 +46,14 @@ const copyToClipboard = async (text) => {
   }
 };
 
+const readDismissed = () => {
+  try {
+    return localStorage.getItem(HELP_DISMISSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
 const Overview = () => {
   const [storeName, setStoreName] = useState('Vendor');
   const [storeSlug, setStoreSlug] = useState('');
@@ -51,9 +63,15 @@ const Overview = () => {
   const [copyState, setCopyState] = useState('idle'); // idle | copied | failed
   const copyTimer = useRef(null);
 
+  // Help popup
+  const [tutorialCount, setTutorialCount] = useState(0);
+  const [helpDismissed, setHelpDismissed] = useState(readDismissed);
+  const [helpOpen, setHelpOpen] = useState(false);
+
   const storeUrl = storeSlug ? `${window.location.origin}/store/${storeSlug}` : '';
   const shareMessage = `Shop at ${storeName === 'Vendor' ? 'my store' : storeName} on Vendira. Browse everything and order straight on WhatsApp:`;
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  const helpEligible = tutorialCount > 0 && !helpDismissed;
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -92,6 +110,37 @@ const Overview = () => {
     fetchDashboardData().finally(() => setLoading(false));
     return () => clearTimeout(copyTimer.current);
   }, [fetchDashboardData]);
+
+  // Find out whether there are any tutorials, so the popup never points to an empty page
+  useEffect(() => {
+    if (helpDismissed) return;
+    let cancelled = false;
+    api
+      .get('/guide')
+      .then((res) => {
+        if (!cancelled) setTutorialCount(res.data?.data?.tutorials?.length || 0);
+      })
+      .catch(() => {}); // the popup is optional; stay quiet if this fails
+    return () => { cancelled = true; };
+  }, [helpDismissed]);
+
+  // Slide the popup in a moment after the dashboard has loaded
+  useEffect(() => {
+    if (loading || !helpEligible) return;
+    const timer = setTimeout(() => setHelpOpen(true), 1200);
+    return () => clearTimeout(timer);
+  }, [loading, helpEligible]);
+
+  const dismissHelp = () => {
+    setHelpOpen(false);
+    try {
+      localStorage.setItem(HELP_DISMISSED_KEY, '1');
+    } catch {
+      // storage unavailable: it will simply show again next visit
+    }
+    // Let the slide-out animation finish before removing the popup
+    setTimeout(() => setHelpDismissed(true), 300);
+  };
 
   const handleRefreshStats = async () => {
     setRefreshing(true);
@@ -152,6 +201,14 @@ const Overview = () => {
             <p className="text-emerald-50 max-w-xl text-sm sm:text-base">
               Welcome to your Vendira control center. Manage your products, update your store settings, and watch your WhatsApp orders roll in.
             </p>
+            {tutorialCount > 0 && (
+              <Link
+                to="/dashboard/guide"
+                className="inline-flex items-center mt-3 text-sm font-bold text-white underline underline-offset-4 decoration-white/50 hover:decoration-white"
+              >
+                <PlayCircle className="w-4 h-4 mr-1.5" /> Confused? Watch the tutorials
+              </Link>
+            )}
           </div>
 
           <button
@@ -311,6 +368,55 @@ const Overview = () => {
           )}
         </div>
       </div>
+
+      {/* HELP POPUP: slides up from the bottom corner */}
+      {helpEligible && (
+        <div
+          role="dialog"
+          aria-label="Need help getting started?"
+          className={`fixed z-10 left-4 right-4 sm:left-auto sm:right-6 sm:w-[22rem] bottom-[max(1rem,env(safe-area-inset-bottom))] sm:bottom-6 transition-all duration-300 ease-out ${
+            helpOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6 pointer-events-none'
+          }`}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl border border-emerald-100 p-4 sm:p-5 relative">
+            <button
+              onClick={dismissHelp}
+              aria-label="Close"
+              className="absolute top-2.5 right-2.5 p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-start gap-3 pr-6">
+              <div className="bg-emerald-50 text-[#128C7E] p-2.5 rounded-xl flex-shrink-0">
+                <PlayCircle className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-gray-900">Feeling confused?</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Watch {tutorialCount === 1 ? 'our short video tutorial' : `our ${tutorialCount} short video tutorials`} to learn how to set up your store and start getting orders.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <Link
+                to="/dashboard/guide"
+                onClick={dismissHelp}
+                className="flex-1 flex items-center justify-center px-4 py-2.5 bg-[#128C7E] hover:bg-[#075E54] text-white text-sm font-bold rounded-xl transition-colors"
+              >
+                Watch tutorials
+              </Link>
+              <button
+                onClick={dismissHelp}
+                className="px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 text-sm font-bold rounded-xl transition-colors"
+              >
+                Maybe later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
