@@ -17,31 +17,30 @@ const Register = () => {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
+  setLoading(true);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const response = await api.post('/auth/register', {
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone.trim(),
-        password: formData.password,
-      });
-      localStorage.setItem('vendira_token', response.data.token);
-      navigate('/dashboard');
-    } catch (err) {
-      if (!err.response) {
-        setError('Cannot reach the server. Check your connection and try again.');
-      } else {
-        setError(err.response.data?.error || err.response.data?.message || 'Something went wrong. Please try again.');
-      }
-    } finally {
-      setLoading(false);
+  try {
+    const response = await api.post('/auth/register', {
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      password: formData.password,
+    });
+    localStorage.setItem('vendira_token', response.data.token);
+    navigate('/dashboard/setup'); // changed from '/dashboard'
+  } catch (err) {
+    if (!err.response) {
+      setError('Cannot reach the server. Check your connection and try again.');
+    } else {
+      setError(err.response.data?.error || err.response.data?.message || 'Something went wrong. Please try again.');
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-[#F4FBF7] flex flex-col justify-center px-4 py-8 sm:px-6 sm:py-12 lg:px-8 font-sans">
