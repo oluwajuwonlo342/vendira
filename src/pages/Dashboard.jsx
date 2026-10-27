@@ -164,7 +164,7 @@ const Dashboard = () => {
         <div id="dashboard-scroll" className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
   <Routes>
   <Route path="/" element={<Overview />} />
-  <Route path="/setup" element={<Setup />} />
+<Route path="/setup" element={<StoreSetup />} />
   <Route path="/store" element={<StoreManager />} />
   <Route path="/categories" element={<CategoryManager />} />
   <Route path="/products" element={<ProductManager />} />
