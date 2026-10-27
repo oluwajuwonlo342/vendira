@@ -22,6 +22,7 @@ import Settings from './dashboard/Settings';
 import CategoryManager from './dashboard/CategoryManager';
 import SiteFeedback from './dashboard/SiteFeedback';
 import GettingStarted from './dashboard/GettingStarted';
+import StoreSetup from './dashboard/StoreSetup';
 
 const navLinks = [
   { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
@@ -32,6 +33,8 @@ const navLinks = [
   { name: 'Feedback', path: '/dashboard/feedback', icon: Star },
   { name: 'Settings', path: '/dashboard/settings', icon: SettingsIcon },
   { name: 'Getting Started', path: '/dashboard/guide', icon: PlayCircle },
+  // in navLinks, right after Overview:
+{ name: 'Store Setup', path: '/dashboard/setup', icon: Rocket },
   
 ];
 
@@ -167,6 +170,8 @@ const Dashboard = () => {
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/feedback" element={<SiteFeedback />} />
             <Route path="/settings" element={<Settings />} />
+            // in <Routes>:
+<Route path="/setup" element={<StoreSetup />} />
 
           </Routes>
         </div>
