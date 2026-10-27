@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Package, Plus, Trash2, Image as ImageIcon, AlertCircle, CheckCircle,
-  UploadCloud, Video, Tags, X, Pencil, Save,
+  UploadCloud, Video, Tags, X, Pencil, Save, Store,
 } from 'lucide-react';
 import api from '../../api/axios';
+import EmptyState from '../../components/EmptyState';
 
 const MAX_IMAGES = 5;
 const MAX_PICK_MB = 15;
@@ -91,6 +92,7 @@ const ProductManager = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [noStore, setNoStore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -115,6 +117,11 @@ const ProductManager = () => {
 
   const fetchInitialData = async () => {
     const [productsRes, categoriesRes] = await Promise.allSettled([api.get('/products'), api.get('/categories')]);
+
+    // A 404 here means the vendor has no store yet
+    if (categoriesRes.status === 'rejected' && categoriesRes.reason?.response?.status === 404) {
+      setNoStore(true);
+    }
 
     if (productsRes.status === 'fulfilled') {
       setProducts(productsRes.value.data?.data?.products || []);
@@ -311,6 +318,19 @@ const ProductManager = () => {
   };
 
   const noPhotos = totalImages === 0;
+
+  // Vendors without a store are sent to setup instead of seeing a broken form
+  if (noStore) {
+    return (
+      <EmptyState
+        icon={Store}
+        title="Set up your store first"
+        description="Products live inside your store. It only takes a few minutes, and your progress is saved as you go."
+        actionLabel="Set up my store"
+        to="/dashboard/setup"
+      />
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8 pb-12">
