@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import api from '../../api/axios';
+import SetupProgressCard from '../../components/SetupProgressCard';
 
 const HELP_DISMISSED_KEY = 'vendira_help_popup_dismissed';
 
@@ -57,6 +58,7 @@ const readDismissed = () => {
 const Overview = () => {
   const [storeName, setStoreName] = useState('Vendor');
   const [storeSlug, setStoreSlug] = useState('');
+  const [isLive, setIsLive] = useState(true);
   const [stats, setStats] = useState({ products: 0, views: 0, clicks: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,7 +70,8 @@ const Overview = () => {
   const [helpDismissed, setHelpDismissed] = useState(readDismissed);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  const storeUrl = storeSlug ? `${window.location.origin}/store/${storeSlug}` : '';
+  // Only offer the share link once the store is live
+  const storeUrl = storeSlug && isLive ? `${window.location.origin}/store/${storeSlug}` : '';
   const shareMessage = `Shop at ${storeName === 'Vendor' ? 'my store' : storeName} on Vendira. Browse everything and order straight on WhatsApp:`;
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   const helpEligible = tutorialCount > 0 && !helpDismissed;
@@ -88,6 +91,7 @@ const Overview = () => {
       if (storeData) {
         setStoreName(storeData.name || storeData.businessName || 'Vendor');
         setStoreSlug(storeData.slug || '');
+        setIsLive(storeData.isPublished !== false);
       }
     } catch (error) {
       if (error.response?.status !== 404) console.error('Store load failed:', error.response?.status);
@@ -222,6 +226,9 @@ const Overview = () => {
         </div>
       </div>
 
+      {/* SETUP PROGRESS */}
+      <SetupProgressCard />
+
       {/* SHARE YOUR STORE */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-8">
         <div className="flex items-start gap-3 mb-4">
@@ -295,9 +302,11 @@ const Overview = () => {
           </>
         ) : (
           <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center">
-            <p className="text-sm text-gray-600">Set up your store to get your shareable link.</p>
-            <Link to="/dashboard/store" className="inline-block mt-3 px-5 py-2.5 bg-[#128C7E] hover:bg-[#075E54] text-white text-sm font-bold rounded-xl transition-colors">
-              Set up my store
+            <p className="text-sm text-gray-600">
+              {storeSlug ? 'Publish your store to get your shareable link.' : 'Set up your store to get your shareable link.'}
+            </p>
+            <Link to="/dashboard/setup" className="inline-block mt-3 px-5 py-2.5 bg-[#128C7E] hover:bg-[#075E54] text-white text-sm font-bold rounded-xl transition-colors">
+              {storeSlug ? 'Finish and publish' : 'Set up my store'}
             </Link>
           </div>
         )}
@@ -353,7 +362,7 @@ const Overview = () => {
             <span className="text-xs text-gray-500 mt-1">Update your name & number</span>
           </Link>
 
-          {storeSlug ? (
+          {storeSlug && isLive ? (
             <a href={`/store/${storeSlug}`} target="_blank" rel="noopener noreferrer" className="group flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-gray-100 bg-gray-50 rounded-xl hover:border-gray-300 hover:bg-gray-100 transition-all text-center min-w-0">
               <ExternalLink className="w-8 h-8 text-gray-500 group-hover:text-gray-700 mb-3 transition-colors" />
               <span className="font-bold text-gray-700 group-hover:text-gray-900">View Public Store</span>
@@ -363,7 +372,7 @@ const Overview = () => {
             <div className="flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-gray-100 bg-gray-50 rounded-xl text-center opacity-60">
               <ExternalLink className="w-8 h-8 text-gray-300 mb-3" />
               <span className="font-bold text-gray-400">View Public Store</span>
-              <span className="text-xs text-gray-400 mt-1">Setup store first</span>
+              <span className="text-xs text-gray-400 mt-1">Publish your store first</span>
             </div>
           )}
         </div>
