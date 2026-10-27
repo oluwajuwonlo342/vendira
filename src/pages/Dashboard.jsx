@@ -161,19 +161,17 @@ const Dashboard = () => {
 
         {/* id lets pages scroll their success/error banners into view */}
         <div id="dashboard-scroll" className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
-          <Routes>
-            <Route path="/guide" element={<GettingStarted />} />
-            <Route path="/" element={<Overview />} />
-            <Route path="/store" element={<StoreManager />} />
-            <Route path="/categories" element={<CategoryManager />} />
-            <Route path="/products" element={<ProductManager />} />
-            <Route path="/reviews" element={<Reviews />} />
-            <Route path="/feedback" element={<SiteFeedback />} />
-            <Route path="/settings" element={<Settings />} />
-            // in <Routes>:
-<Route path="/setup" element={<StoreSetup />} />
-
-          </Routes>
+  <Routes>
+  <Route path="/" element={<Overview />} />
+  <Route path="/setup" element={<Setup />} />
+  <Route path="/store" element={<StoreManager />} />
+  <Route path="/categories" element={<CategoryManager />} />
+  <Route path="/products" element={<ProductManager />} />
+  <Route path="/reviews" element={<Reviews />} />
+  <Route path="/feedback" element={<SiteFeedback />} />
+  <Route path="/settings" element={<Settings />} />
+  <Route path="/guide" element={<GettingStarted />} />
+</Routes>
         </div>
 
       </main>
