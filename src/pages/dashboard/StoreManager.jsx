@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Save,
   Store,
@@ -13,26 +14,8 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
-// 1. Imports
 import { CURRENCIES } from '../../utils/money';
 import { normalizeWhatsapp, buildWhatsAppUrl, WHATSAPP_HELP } from '../../utils/whatsapp';
-
-// 2. formData starts with two extra fields:
-//    { name: '', slug: '', description: '', whatsappNumber: '', currency: 'NGN', whatsappCta: 'order' }
-//    and when the store loads, add:
-//      currency: store.currency || 'NGN',
-//      whatsappCta: store.whatsappCta || 'order',
-
-// 3. In buildFormData, next to the other appends:
-submitData.append('currency', formData.currency);
-submitData.append('whatsappCta', formData.whatsappCta);
-
-// 4. Before the return:
-const waDigits = normalizeWhatsapp(formData.whatsappNumber);
-const waTyped = formData.whatsappNumber.trim().length > 0;
-
-// 5. At the top of handleSubmit, after `if (preparing) return;`
-if (!waDigits) return showMessage('error', WHATSAPP_HELP);
 
 const MAX_PICK_MB = 15; // reject only absurdly large originals; everything else is shrunk first
 const UPLOAD_TIMEOUT_MS = 120000;
@@ -124,8 +107,16 @@ const describeError = (error) => {
 };
 
 const StoreManager = () => {
-  const [formData, setFormData] = useState({ name: '', slug: '', description: '', whatsappNumber: '' });
+  const [formData, setFormData] = useState({
+    name: '',
+    slug: '',
+    description: '',
+    whatsappNumber: '',
+    currency: 'NGN',
+    whatsappCta: 'order',
+  });
   const [savedSlug, setSavedSlug] = useState(''); // the slug that is actually live on the server
+  const [isLive, setIsLive] = useState(true);
 
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState('');
@@ -149,6 +140,10 @@ const StoreManager = () => {
   const storeUrl = savedSlug ? `${window.location.origin}/store/${savedSlug}` : '';
   const slugChanged = hasStore && savedSlug && formData.slug.trim() !== savedSlug;
 
+  // What a customer's WhatsApp link would use, or null if the number can't work
+  const waDigits = normalizeWhatsapp(formData.whatsappNumber);
+  const waTyped = formData.whatsappNumber.trim().length > 0;
+
   useEffect(() => {
     const fetchMyStore = async () => {
       try {
@@ -160,8 +155,11 @@ const StoreManager = () => {
             slug: store.slug || '',
             description: store.description || '',
             whatsappNumber: store.whatsappNumber || '',
+            currency: store.currency || 'NGN',
+            whatsappCta: store.whatsappCta || 'order',
           });
           setSavedSlug(store.slug || '');
+          setIsLive(store.isPublished !== false);
           if (store.logo?.url) setLogoPreview(store.logo.url);
           if (store.coverImage?.url) setCoverPreview(store.coverImage.url);
           setHasStore(true);
@@ -240,6 +238,8 @@ const StoreManager = () => {
     submitData.append('slug', formData.slug.trim());
     submitData.append('description', formData.description.trim());
     submitData.append('whatsappNumber', formData.whatsappNumber.trim());
+    submitData.append('currency', formData.currency);
+    submitData.append('whatsappCta', formData.whatsappCta);
     if (logoFile) submitData.append('logo', logoFile);
     if (coverFile) submitData.append('coverImage', coverFile);
     return submitData;
@@ -259,6 +259,8 @@ const StoreManager = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (preparing) return;
+    if (!waDigits) return showMessage('error', WHATSAPP_HELP);
+
     setSaving(true);
     setProgress(0);
     setStatusText('');
@@ -284,9 +286,17 @@ const StoreManager = () => {
       const saved = res.data?.data?.store;
       if (saved?.logo?.url) setLogoPreview(saved.logo.url);
       if (saved?.coverImage?.url) setCoverPreview(saved.coverImage.url);
-      if (saved?.slug) {
-        setFormData((prev) => ({ ...prev, slug: saved.slug }));
-        setSavedSlug(saved.slug);
+      if (saved) {
+        setFormData((prev) => ({
+          ...prev,
+          slug: saved.slug || prev.slug,
+          // The server stores the number in international form; show what was saved
+          whatsappNumber: saved.whatsappNumber || prev.whatsappNumber,
+          currency: saved.currency || prev.currency,
+          whatsappCta: saved.whatsappCta || prev.whatsappCta,
+        }));
+        if (saved.slug) setSavedSlug(saved.slug);
+        setIsLive(saved.isPublished !== false);
       }
 
       setLogoFile(null);
@@ -374,7 +384,20 @@ const StoreManager = () => {
       )}
 
       {/* YOUR STORE LINK */}
-      {storeUrl && (
+      {storeUrl && !isLive && (
+        <div className="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="font-bold text-amber-900 text-sm">Your store isn't published yet</p>
+            <p className="text-sm text-amber-800 mt-0.5">
+              Customers can't open your store link until you publish it.{' '}
+              <Link to="/dashboard/setup?step=6" className="font-bold underline">Preview and publish</Link>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {storeUrl && isLive && (
         <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <h3 className="font-bold text-gray-900">Your store link</h3>
           <p className="text-sm text-gray-500 mt-0.5 mb-3">Share this with your customers, or put it in your bio and WhatsApp status.</p>
@@ -547,6 +570,7 @@ const StoreManager = () => {
           </div>
         </div>
 
+        {/* WhatsApp number */}
         <div>
           <label htmlFor="whatsappNumber" className="block text-sm font-semibold text-gray-700 mb-1">WhatsApp Number for Orders</label>
           <input
@@ -558,9 +582,50 @@ const StoreManager = () => {
             autoComplete="tel"
             value={formData.whatsappNumber}
             onChange={handleChange}
-            className={`${inputClass} md:w-1/2`}
+            className={`${inputClass} md:w-1/2 ${waTyped && !waDigits ? 'border-red-400 focus:ring-red-300 focus:border-red-400' : ''}`}
             placeholder="08012345678"
+            aria-invalid={waTyped && !waDigits}
           />
+          {waDigits ? (
+            <p className="text-xs text-emerald-700 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>Customers will chat with <strong>+{waDigits}</strong>.</span>
+              <a
+                href={buildWhatsAppUrl(waDigits, 'Test message from my Vendira store settings.')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold underline inline-flex items-center"
+              >
+                <ExternalLink className="w-3 h-3 mr-1" /> Test this number
+              </a>
+            </p>
+          ) : waTyped ? (
+            <p className="text-xs text-red-600 mt-1.5">{WHATSAPP_HELP}</p>
+          ) : (
+            <p className="text-xs text-gray-500 mt-1.5">Outside Nigeria? Start with + and the country code, for example +233201234567.</p>
+          )}
+        </div>
+
+        {/* Currency + button wording */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
+          <div>
+            <label htmlFor="currency" className="block text-sm font-semibold text-gray-700 mb-1">Currency</label>
+            <select id="currency" name="currency" value={formData.currency} onChange={handleChange} className={`${inputClass} bg-white`}>
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Used for prices on your store and in WhatsApp messages. It does not convert prices you've already set.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="whatsappCta" className="block text-sm font-semibold text-gray-700 mb-1">WhatsApp button says</label>
+            <select id="whatsappCta" name="whatsappCta" value={formData.whatsappCta} onChange={handleChange} className={`${inputClass} bg-white`}>
+              <option value="order">Order on WhatsApp</option>
+              <option value="enquire">Enquire on WhatsApp</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Choose "Enquire" if customers usually ask questions before they buy.</p>
+          </div>
         </div>
 
         <div>
@@ -596,11 +661,7 @@ const StoreManager = () => {
               className="w-full sm:w-auto flex items-center justify-center px-6 py-3.5 sm:py-3 bg-[#128C7E] text-white font-bold rounded-xl hover:bg-[#075E54] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
             >
               <Save className="w-5 h-5 mr-2" />
-              {preparing
-                ? 'Preparing image...'
-                : saving
-                  ? 'Saving...'
-                  : 'Save Store Details'}
+              {preparing ? 'Preparing image...' : saving ? 'Saving...' : 'Save Store Details'}
             </button>
           </div>
         </div>
