@@ -13,6 +13,26 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
+// 1. Imports
+import { CURRENCIES } from '../../utils/money';
+import { normalizeWhatsapp, buildWhatsAppUrl, WHATSAPP_HELP } from '../../utils/whatsapp';
+
+// 2. formData starts with two extra fields:
+//    { name: '', slug: '', description: '', whatsappNumber: '', currency: 'NGN', whatsappCta: 'order' }
+//    and when the store loads, add:
+//      currency: store.currency || 'NGN',
+//      whatsappCta: store.whatsappCta || 'order',
+
+// 3. In buildFormData, next to the other appends:
+submitData.append('currency', formData.currency);
+submitData.append('whatsappCta', formData.whatsappCta);
+
+// 4. Before the return:
+const waDigits = normalizeWhatsapp(formData.whatsappNumber);
+const waTyped = formData.whatsappNumber.trim().length > 0;
+
+// 5. At the top of handleSubmit, after `if (preparing) return;`
+if (!waDigits) return showMessage('error', WHATSAPP_HELP);
 
 const MAX_PICK_MB = 15; // reject only absurdly large originals; everything else is shrunk first
 const UPLOAD_TIMEOUT_MS = 120000;
