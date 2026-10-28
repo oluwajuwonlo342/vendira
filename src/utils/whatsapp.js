@@ -1,41 +1,40 @@
-/**
- * Generates a pre-filled WhatsApp link for a product inquiry.
- * 
- * @param {string} phone - Vendor's WhatsApp number
- * @param {object} product - The product object
- * @param {object} selectedAttributes - Key-value pair of selected variations (e.g., { "Size": "XL", "Color": "Blue" })
- * @returns {string} The fully formatted wa.me URL
- */
-export const generateWhatsAppLink = (phone, product, selectedAttributes = {}) => {
-  // 1. Clean the phone number (remove spaces, plus signs, dashes)
-  let cleanPhone = phone.replace(/\D/g, '');
-  
-  // Convert standard Nigerian 080... to 23480... (Target audience normalization)
-  if (cleanPhone.startsWith('0')) {
-    cleanPhone = '234' + cleanPhone.substring(1);
-  }
+import { formatMoney } from './money';
 
-  // 2. Construct the message
-  let message = `Hello 👋\n\nI'm interested in:\n\n`;
-  message += `*Product:* ${product.name}\n`;
-  message += `*Price:* ₦${product.price.toLocaleString()}\n`;
-  
-  // 3. Append dynamic attributes if the user selected any
-  const attributeKeys = Object.keys(selectedAttributes);
-  if (attributeKeys.length > 0) {
-    message += `\n*Selected Options:*\n`;
-    attributeKeys.forEach(key => {
-      message += `- ${key}: ${selectedAttributes[key]}\n`;
-    });
-  }
-  
-  message += `\nIs this available?`;
-  
-  // Append the URL so the vendor knows exactly which item it is
-  message += `\n\nLink: ${window.location.origin}/store/${product.store.slug}/product/${product.slug}`;
+export const WHATSAPP_HELP =
+  'Enter a valid WhatsApp number, for example 08012345678. For numbers outside Nigeria, start with + and the country code, for example +233201234567.';
 
-  // 4. Encode for URL format
-  const encodedMessage = encodeURIComponent(message);
-  
-  return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+// Same rules as the server, so what vendors see while typing matches what is saved
+export const normalizeWhatsapp = (raw) => {
+  const text = String(raw ?? '').trim();
+  let digits = text.replace(/\D/g, '');
+  if (!digits) return null;
+
+  if (!text.startsWith('+')) {
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    else if (digits.length === 11 && digits.startsWith('0')) digits = `234${digits.slice(1)}`;
+    else if (digits.length === 10 && /^[789]/.test(digits)) digits = `234${digits}`;
+  }
+  if (digits.startsWith('2340') && digits.length === 14) digits = `234${digits.slice(4)}`;
+
+  if (digits.length < 8 || digits.length > 15 || digits.startsWith('0')) return null;
+  if (digits.startsWith('234') && digits.length !== 13) return null;
+  return digits;
 };
+
+export const buildWhatsAppMessage = ({ productName, price, currency, link, variations = {}, mode = 'order' }) => {
+  const verb = mode === 'enquire' ? 'enquire about' : 'order';
+  const name = String(productName || 'this product').slice(0, 120);
+  const parts = [
+    `Hello, I found this product on Vendira and would like to ${verb} ${name} priced at ${formatMoney(price, currency)}.`,
+  ];
+
+  const chosen = Object.entries(variations).filter(([, value]) => value);
+  if (chosen.length) parts.push(`Selected: ${chosen.map(([key, value]) => `${key}: ${value}`).join(', ')}.`);
+
+  parts.push(`Product link: ${link}`);
+  parts.push('Is it available?');
+  return parts.join('\n\n');
+};
+
+// wa.me works on phones (opens the app) and on desktop (opens WhatsApp Desktop or WhatsApp Web)
+export const buildWhatsAppUrl = (digits, message) => `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
