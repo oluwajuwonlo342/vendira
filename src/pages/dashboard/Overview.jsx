@@ -13,6 +13,7 @@ import {
   Share2,
   MessageCircle,
   PlayCircle,
+  AlertCircle,
   X,
 } from 'lucide-react';
 import api from '../../api/axios';
@@ -60,6 +61,8 @@ const Overview = () => {
   const [storeSlug, setStoreSlug] = useState('');
   const [isLive, setIsLive] = useState(true);
   const [stats, setStats] = useState({ products: 0, views: 0, clicks: 0 });
+  const [waRecent, setWaRecent] = useState(null);
+  const [whatsappMissing, setWhatsappMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [copyState, setCopyState] = useState('idle'); // idle | copied | failed
@@ -84,7 +87,7 @@ const Overview = () => {
   };
 
   const fetchDashboardData = useCallback(async () => {
-    // Store and products load separately, so a products error doesn't hide the share link
+    // Each request loads separately, so one failure doesn't hide the rest
     try {
       const storeRes = await api.get('/stores/my-store');
       const storeData = storeRes.data?.data?.store;
@@ -92,6 +95,8 @@ const Overview = () => {
         setStoreName(storeData.name || storeData.businessName || 'Vendor');
         setStoreSlug(storeData.slug || '');
         setIsLive(storeData.isPublished !== false);
+        // null means the saved number can't produce a working WhatsApp link
+        setWhatsappMissing(storeData.whatsappDigits === null);
       }
     } catch (error) {
       if (error.response?.status !== 404) console.error('Store load failed:', error.response?.status);
@@ -107,6 +112,13 @@ const Overview = () => {
       });
     } catch (error) {
       console.error('Products load failed:', error.response?.status);
+    }
+
+    try {
+      const waRes = await api.get('/products/analytics/whatsapp');
+      setWaRecent(waRes.data?.data?.last7Days ?? null);
+    } catch {
+      // optional stat: stay quiet if it fails
     }
   }, []);
 
@@ -226,6 +238,20 @@ const Overview = () => {
         </div>
       </div>
 
+      {/* WHATSAPP NUMBER WARNING */}
+      {whatsappMissing && (
+        <div role="alert" className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="font-bold text-amber-900 text-sm">Customers can't message you on WhatsApp yet</p>
+            <p className="text-sm text-amber-800 mt-0.5">
+              Your WhatsApp number is missing or not valid, so the WhatsApp button on your store is switched off.{' '}
+              <Link to="/dashboard/store" className="font-bold underline">Fix it now</Link>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* SETUP PROGRESS */}
       <SetupProgressCard />
 
@@ -338,9 +364,13 @@ const Overview = () => {
           <div className="bg-green-50 p-3.5 sm:p-4 rounded-xl text-[#25D366] mr-4 sm:mr-5">
             <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-gray-500 text-sm font-semibold">WhatsApp Clicks</p>
             <h3 className="text-2xl font-black text-gray-900">{stats.clicks.toLocaleString()}</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {waRecent !== null ? `${waRecent.toLocaleString()} in the last 7 days. ` : ''}
+              Taps on the button, not confirmed orders.
+            </p>
           </div>
         </div>
       </div>
