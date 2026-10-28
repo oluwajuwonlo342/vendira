@@ -1,7 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
-import { MessageCircle, ShoppingBag, Store as StoreIcon, Search, X, ChevronRight, Star } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { MessageCircle, ShoppingBag, Store as StoreIcon, Search, X, ChevronRight, Star, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
+import { formatMoney } from '../utils/money';
+import { normalizeWhatsapp, buildWhatsAppUrl } from '../utils/whatsapp';
+import WhatsAppButton from '../components/WhatsAppButton';
 
 const getOptions = (value) => {
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
@@ -13,8 +16,6 @@ const getCategoryName = (cat) => {
   if (!cat) return 'Uncategorized';
   return typeof cat === 'object' ? (cat.name || 'Uncategorized') : 'Uncategorized';
 };
-
-const formatPrice = (price) => `₦${Number(price || 0).toLocaleString()}`;
 
 const averageRating = (reviews = []) =>
   reviews.length ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0;
@@ -32,6 +33,7 @@ const recordViewOnce = (productId) => {
 
 const Storefront = () => {
   const { storeSlug } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [store, setStore] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,10 +45,15 @@ const Storefront = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedVariations, setSelectedVariations] = useState({});
   const [activeImage, setActiveImage] = useState(0);
+  const [linkNotice, setLinkNotice] = useState('');
+  const handledLink = useRef(null);
 
   const [feedbackData, setFeedbackData] = useState({ customerName: '', rating: 5, comment: '' });
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState({ type: '', text: '' });
+
+  const currency = store?.currency || 'NGN';
+  const money = (amount) => formatMoney(amount, currency);
 
   useEffect(() => {
     const fetchStorefrontData = async () => {
@@ -67,20 +74,10 @@ const Storefront = () => {
     if (storeSlug) fetchStorefrontData();
   }, [storeSlug]);
 
-  // Modal: Escape closes it and the page behind stops scrolling
-  useEffect(() => {
-    if (!selectedProduct) return;
-    const onKeyDown = (e) => { if (e.key === 'Escape') handleCloseModal(); };
-    document.addEventListener('keydown', onKeyDown);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [selectedProduct]);
+  const productLink = (product) => `${window.location.origin}/store/${store?.slug || storeSlug}?product=${product._id}`;
 
-  const handleOpenProduct = (product) => {
+  const handleOpenProduct = (product, { updateUrl = true } = {}) => {
+    handledLink.current = product._id;
     setSelectedProduct(product);
     setActiveImage(0);
     setFeedbackMsg({ type: '', text: '' });
@@ -93,32 +90,48 @@ const Storefront = () => {
     });
     setSelectedVariations(defaults);
 
+    if (updateUrl) setSearchParams({ product: product._id }, { replace: true });
     recordViewOnce(product._id);
   };
 
   const handleCloseModal = () => {
     setSelectedProduct(null);
     setSelectedVariations({});
+    setSearchParams({}, { replace: true });
   };
+
+  // A shared product link (?product=ID) opens that product as soon as the store has loaded
+  useEffect(() => {
+    const wanted = searchParams.get('product');
+    if (loading || !store || !wanted || handledLink.current === wanted) return;
+    handledLink.current = wanted;
+
+    const match = products.find((p) => p._id === wanted);
+    if (match) {
+      handleOpenProduct(match, { updateUrl: false });
+    } else {
+      setLinkNotice("That product isn't available any more, but you can browse the rest of this store.");
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, store, products, searchParams]);
+
+  // Modal: Escape closes it and the page behind stops scrolling
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const onKeyDown = (e) => { if (e.key === 'Escape') handleCloseModal(); };
+    document.addEventListener('keydown', onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProduct]);
 
   const updateVariation = (name, value) => {
     setSelectedVariations((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const getWhatsAppLink = (product, variations = {}) => {
-    let text = `Hi! I would like to order this item:\n\n*${product.name}*\nPrice: ${formatPrice(product.price)}\n`;
-    if (Object.keys(variations).length > 0) {
-      text += `\n*My Selections:*\n`;
-      Object.entries(variations).forEach(([key, val]) => { text += `- ${key}: ${val}\n`; });
-    }
-    text += `\nIs it available?`;
-    return `https://wa.me/${store?.whatsappNumber?.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`;
-  };
-
-  const handleWhatsAppClick = () => {
-    if (selectedProduct) {
-      api.post(`/products/${selectedProduct._id}/click`).catch(() => {});
-    }
   };
 
   const handleSubmitFeedback = async (e) => {
@@ -194,6 +207,15 @@ const Storefront = () => {
   const modalReviews = selectedProduct?.reviews || [];
   const modalAverage = averageRating(modalReviews);
 
+  const storeName = store.name || store.businessName;
+  const sellerDigits = store.whatsappDigits ?? normalizeWhatsapp(store.whatsappNumber);
+  const contactUrl = sellerDigits
+    ? buildWhatsAppUrl(
+        sellerDigits,
+        `Hello, I found your store (${storeName}) on Vendira and would like to ask a question.\n\nStore link: ${window.location.origin}/store/${store.slug}`
+      )
+    : null;
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans pb-16 sm:pb-20 relative overflow-x-hidden">
 
@@ -209,18 +231,22 @@ const Storefront = () => {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative -mt-14 sm:-mt-24">
           <div className="bg-white rounded-3xl shadow-lg p-5 sm:p-8 flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-6 border border-gray-100">
             <div className="w-20 h-20 sm:w-32 sm:h-32 rounded-2xl bg-gray-50 border-4 border-white shadow-sm flex-shrink-0 flex items-center justify-center overflow-hidden z-10">
-              {store.logo?.url ? <img src={store.logo.url} alt={store.name} className="w-full h-full object-cover" /> : <StoreIcon className="w-10 h-10 sm:w-12 sm:h-12 text-gray-300" />}
+              {store.logo?.url ? <img src={store.logo.url} alt={storeName} className="w-full h-full object-cover" /> : <StoreIcon className="w-10 h-10 sm:w-12 sm:h-12 text-gray-300" />}
             </div>
             <div className="flex-1 min-w-0 sm:mt-4 z-10">
-              <h1 className="text-xl sm:text-3xl font-black text-gray-900 break-words">{store.name || store.businessName}</h1>
+              <h1 className="text-xl sm:text-3xl font-black text-gray-900 break-words">{storeName}</h1>
               {store.description && (
                 <p className="text-gray-600 mt-2 text-sm sm:text-base leading-relaxed max-w-2xl break-words">{store.description}</p>
               )}
             </div>
             <div className="sm:mt-6 sm:ml-auto w-full sm:w-auto z-10">
-              <a href={`https://wa.me/${store.whatsappNumber?.replace(/\D/g, '')}?text=Hi!`} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto flex items-center justify-center px-6 py-3.5 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl shadow-sm transition-colors">
-                <MessageCircle className="w-5 h-5 mr-2 text-[#25D366]" /> Contact Seller
-              </a>
+              {contactUrl ? (
+                <a href={contactUrl} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto flex items-center justify-center px-6 py-3.5 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl shadow-sm transition-colors">
+                  <MessageCircle className="w-5 h-5 mr-2 text-[#25D366]" /> Contact Seller
+                </a>
+              ) : (
+                <p className="text-xs text-gray-400 bg-gray-50 border border-dashed border-gray-200 rounded-xl px-4 py-3">WhatsApp not available for this store yet</p>
+              )}
             </div>
           </div>
         </div>
@@ -228,6 +254,14 @@ const Storefront = () => {
 
       {/* PRODUCT CATALOGUE */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 sm:mt-10">
+
+        {linkNotice && (
+          <div role="status" className="mb-5 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3.5">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-900 flex-1">{linkNotice}</p>
+            <button onClick={() => setLinkNotice('')} aria-label="Dismiss" className="text-amber-700 hover:text-amber-900"><X className="w-4 h-4" /></button>
+          </div>
+        )}
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 sm:mb-6 gap-3 sm:gap-4">
           <div className="flex items-center flex-wrap gap-y-2">
@@ -247,7 +281,6 @@ const Storefront = () => {
           </div>
         </div>
 
-        {/* Category pills: scroll sideways, bleed to the screen edge on phones */}
         {categories.length > 2 && (
           <div className="flex overflow-x-auto pb-3 mb-3 gap-2 -mx-4 px-4 sm:mx-0 sm:px-0" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {categories.map((cat) => (
@@ -269,8 +302,10 @@ const Storefront = () => {
         {filteredProducts.length === 0 ? (
           <div className="text-center py-10 sm:py-12 px-4 bg-white rounded-2xl border border-gray-100 mt-4">
             <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-gray-900">No products found</h3>
-            <p className="text-gray-500 text-sm sm:text-base">Try adjusting your search or selecting a different category.</p>
+            <h3 className="text-lg font-bold text-gray-900">{products.length === 0 ? 'No products yet' : 'No products found'}</h3>
+            <p className="text-gray-500 text-sm sm:text-base">
+              {products.length === 0 ? 'This store is still adding its products. Please check back soon.' : 'Try adjusting your search or selecting a different category.'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
@@ -295,7 +330,7 @@ const Storefront = () => {
                   )}
 
                   <div className="mt-auto pt-2 flex items-center justify-between gap-2 border-t border-gray-50">
-                    <p className="text-base sm:text-lg font-black text-[#128C7E] truncate">{formatPrice(p.price)}</p>
+                    <p className="text-base sm:text-lg font-black text-[#128C7E] truncate">{money(p.price)}</p>
                     <div className="hidden sm:block bg-gray-50 p-1.5 rounded-lg text-gray-400 group-hover:bg-[#25D366] group-hover:text-white transition-colors flex-shrink-0"><ChevronRight className="w-4 h-4" /></div>
                   </div>
                 </div>
@@ -315,7 +350,6 @@ const Storefront = () => {
               <X className="w-5 h-5" />
             </button>
 
-            {/* On phones the whole sheet scrolls; from md each column scrolls on its own */}
             <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto md:overflow-hidden rounded-t-3xl sm:rounded-3xl">
 
               {/* Gallery */}
@@ -355,7 +389,7 @@ const Storefront = () => {
                   </div>
                 )}
 
-                <p className="text-2xl sm:text-3xl font-black text-[#128C7E] mb-5 sm:mb-6">{formatPrice(selectedProduct.price)}</p>
+                <p className="text-2xl sm:text-3xl font-black text-[#128C7E] mb-5 sm:mb-6">{money(selectedProduct.price)}</p>
 
                 {selectedProduct.description && (
                   <div className="mb-5 sm:mb-6">
@@ -385,16 +419,14 @@ const Storefront = () => {
                   </div>
                 )}
 
-                <div className="mb-6 sm:mb-8">
-                  <a
-                    href={getWhatsAppLink(selectedProduct, selectedVariations)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={handleWhatsAppClick}
-                    className="w-full flex items-center justify-center py-3.5 sm:py-4 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold rounded-xl shadow-sm text-base sm:text-lg transition-colors"
-                  >
-                    <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 mr-2" /> Order via WhatsApp
-                  </a>
+                {/* On phones this bar stays pinned to the bottom of the sheet so the button is always in reach */}
+                <div className="sticky bottom-0 z-10 -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur border-t border-gray-100 shadow-[0_-6px_12px_-8px_rgba(0,0,0,0.15)] mb-5 md:static md:mx-0 md:px-0 md:pt-0 md:pb-0 md:border-0 md:shadow-none md:bg-transparent md:backdrop-blur-none md:mb-8">
+                  <WhatsAppButton
+                    store={store}
+                    product={selectedProduct}
+                    variations={selectedVariations}
+                    productLink={productLink(selectedProduct)}
+                  />
                 </div>
 
                 {/* REVIEWS */}
