@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
+import { formatMoney } from '../../utils/money';
 
 const MAX_IMAGES = 5;
 const MAX_PICK_MB = 15;
@@ -41,8 +42,6 @@ const getCategoryId = (cat) => {
   if (!cat) return '';
   return typeof cat === 'object' ? cat._id || '' : cat;
 };
-
-const formatPrice = (price) => `₦${Number(price || 0).toLocaleString()}`;
 
 // Shrinks a photo in the browser so uploads are fast on slow mobile data
 const compressImage = (file, maxSide = 1400, quality = 0.82) =>
@@ -91,6 +90,7 @@ const describeError = (error, fallback) => {
 const ProductManager = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [currency, setCurrency] = useState('NGN');
   const [loading, setLoading] = useState(true);
   const [noStore, setNoStore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -114,14 +114,20 @@ const ProductManager = () => {
   const previewUrls = useRef([]);
 
   const isEditing = Boolean(editingId);
+  const money = (amount) => formatMoney(amount, currency);
 
   const fetchInitialData = async () => {
-    const [productsRes, categoriesRes] = await Promise.allSettled([api.get('/products'), api.get('/categories')]);
+    const [productsRes, categoriesRes, storeRes] = await Promise.allSettled([
+      api.get('/products'),
+      api.get('/categories'),
+      api.get('/stores/my-store'),
+    ]);
 
     // A 404 here means the vendor has no store yet
-    if (categoriesRes.status === 'rejected' && categoriesRes.reason?.response?.status === 404) {
-      setNoStore(true);
-    }
+    const noStoreYet = [categoriesRes, storeRes].some(
+      (r) => r.status === 'rejected' && r.reason?.response?.status === 404
+    );
+    if (noStoreYet) setNoStore(true);
 
     if (productsRes.status === 'fulfilled') {
       setProducts(productsRes.value.data?.data?.products || []);
@@ -129,8 +135,14 @@ const ProductManager = () => {
     if (categoriesRes.status === 'fulfilled') {
       setCategories(categoriesRes.value.data?.data || []);
     }
+    if (storeRes.status === 'fulfilled') {
+      setCurrency(storeRes.value.data?.data?.store?.currency || 'NGN');
+    }
 
-    const failed = [productsRes, categoriesRes].find((r) => r.status === 'rejected');
+    // Report real failures only. A missing store is handled by the empty state below.
+    const failed = [productsRes, categoriesRes, storeRes].find(
+      (r) => r.status === 'rejected' && r.reason?.response?.status !== 404
+    );
     if (failed) {
       console.error('Error fetching data:', failed.reason?.response?.status, failed.reason?.response?.data);
       setMessage({
@@ -395,7 +407,7 @@ const ProductManager = () => {
               <input id="name" type="text" name="name" required value={formData.name} onChange={handleChange} className={inputClass} placeholder="e.g. Designer Sneakers" />
             </div>
             <div>
-              <label htmlFor="price" className="block text-sm font-semibold text-gray-700 mb-1">Base Price (₦)</label>
+              <label htmlFor="price" className="block text-sm font-semibold text-gray-700 mb-1">{`Base Price (${currency})`}</label>
               <input id="price" type="number" inputMode="decimal" name="price" required min="0" value={formData.price} onChange={handleChange} className={inputClass} placeholder="15000" />
             </div>
           </div>
@@ -607,7 +619,7 @@ const ProductManager = () => {
                       )}
                     </div>
                     <h4 className="font-bold text-gray-900 truncate" title={p.name}>{p.name}</h4>
-                    <p className="text-[#128C7E] font-black mt-1 text-lg">{formatPrice(p.price)}</p>
+                    <p className="text-[#128C7E] font-black mt-1 text-lg">{money(p.price)}</p>
                     <div className="flex flex-wrap gap-2 mt-3">
                       <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded-md font-semibold truncate max-w-full">
                         {getCategoryName(p.category)}
@@ -619,7 +631,7 @@ const ProductManager = () => {
                       ))}
                     </div>
                     <p className="text-xs text-gray-400 mt-3">
-                      {p.views || 0} views · {p.whatsappClicks || 0} WhatsApp clicks
+                      {p.views || 0} views · {p.whatsappClicks || 0} WhatsApp taps
                     </p>
                   </div>
                   <div className="mt-5 pt-3 border-t border-gray-100 flex justify-between items-center gap-2">
