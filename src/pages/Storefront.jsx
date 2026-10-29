@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { MessageCircle, ShoppingBag, Store as StoreIcon, Search, X, ChevronRight, Star, AlertCircle } from 'lucide-react';
+import { MessageCircle, ShoppingBag, Store as StoreIcon, Search, X, ChevronRight, Star, AlertCircle, MapPin } from 'lucide-react';
 import api from '../api/axios';
 import { formatMoney } from '../utils/money';
 import { normalizeWhatsapp, buildWhatsAppUrl } from '../utils/whatsapp';
@@ -12,7 +12,6 @@ const getOptions = (value) => {
   if (value === null || value === undefined) return [];
   return String(value).split(',').map((s) => s.trim()).filter(Boolean);
 };
-const place = [store?.location?.city, store?.location?.state].filter(Boolean).join(', ');
 const getCategoryName = (cat) => {
   if (!cat) return 'Uncategorized';
   return typeof cat === 'object' ? (cat.name || 'Uncategorized') : 'Uncategorized';
@@ -39,6 +38,10 @@ const Storefront = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const place = [store?.location?.city, store?.location?.state]
+    .filter(Boolean)
+    .join(', ');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
