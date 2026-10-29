@@ -16,6 +16,7 @@ import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
 import { CURRENCIES } from '../../utils/money';
 import { normalizeWhatsapp, buildWhatsAppUrl, WHATSAPP_HELP } from '../../utils/whatsapp';
+import LocationFields from '../../components/LocationFields';
 
 const MAX_PICK_MB = 15; // reject only absurdly large originals; everything else is shrunk first
 const UPLOAD_TIMEOUT_MS = 120000;
@@ -157,6 +158,11 @@ const StoreManager = () => {
             whatsappNumber: store.whatsappNumber || '',
             currency: store.currency || 'NGN',
             whatsappCta: store.whatsappCta || 'order',
+            state: store.location?.state || '',
+city: store.location?.city || '',
+address: store.location?.address || '',
+hasPhysicalStore: Boolean(store.hasPhysicalStore),
+mapLink: store.mapLink || '',
           });
           setSavedSlug(store.slug || '');
           setIsLive(store.isPublished !== false);
@@ -242,6 +248,11 @@ const StoreManager = () => {
     submitData.append('whatsappCta', formData.whatsappCta);
     if (logoFile) submitData.append('logo', logoFile);
     if (coverFile) submitData.append('coverImage', coverFile);
+    submitData.append('state', formData.state.trim());
+submitData.append('city', formData.city.trim());
+submitData.append('address', formData.address.trim());
+submitData.append('hasPhysicalStore', String(formData.hasPhysicalStore));
+submitData.append('mapLink', formData.mapLink.trim());
     return submitData;
   };
 
@@ -295,6 +306,9 @@ const StoreManager = () => {
           currency: saved.currency || prev.currency,
           whatsappCta: saved.whatsappCta || prev.whatsappCta,
         }));
+        if (formData.hasPhysicalStore && !formData.address.trim()) {
+  return showMessage('error', 'Add your shop address, or switch off "I have a physical shop".');
+}
         if (saved.slug) setSavedSlug(saved.slug);
         setIsLive(saved.isPublished !== false);
       }
@@ -627,7 +641,14 @@ const StoreManager = () => {
             <p className="text-xs text-gray-500 mt-1">Choose "Enquire" if customers usually ask questions before they buy.</p>
           </div>
         </div>
-
+<div>
+  <h3 className="font-bold text-gray-900 mb-3">Business location</h3>
+  <LocationFields
+    idPrefix="store"
+    values={formData}
+    onChange={(field, value) => setFormData((prev) => ({ ...prev, [field]: value }))}
+  />
+</div>
         <div>
           <label htmlFor="description" className="block text-sm font-semibold text-gray-700 mb-1">Store Description</label>
           <textarea
