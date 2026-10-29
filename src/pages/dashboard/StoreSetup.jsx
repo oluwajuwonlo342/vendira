@@ -8,7 +8,7 @@ import {
 import api from '../../api/axios';
 import { compressImage, copyToClipboard } from '../../utils/helpers';
 import StorePreview from '../../components/StorePreview';
-
+import LocationFields from '../../components/LocationFields';
 const STEPS = [
   { n: 1, title: 'Store basics', hint: 'Your store name and WhatsApp number' },
   { n: 2, title: 'Branding', hint: 'Logo and cover image' },
@@ -58,6 +58,9 @@ const seedForm = (d) => ({
   tiktok: d.store?.socialLinks?.tiktok || '',
   twitter: d.store?.socialLinks?.twitter || '',
   website: d.store?.socialLinks?.website || '',
+  hasPhysicalStore: Boolean(d.store?.hasPhysicalStore),
+mapLink: d.store?.mapLink || '',
+
 });
 
 const Field = ({ id, label, hint, children }) => (
@@ -314,13 +317,18 @@ const StoreSetup = () => {
         next(3);
       }
     } else if (step === 3) {
-      const ok = await saveStore({
-        description: form.description,
-        businessType: form.businessType,
-        state: form.state,
-        city: form.city,
-        address: form.address,
-      });
+if (form.hasPhysicalStore && !form.address.trim()) {
+  return showMessage('error', 'Add your shop address, or switch off "I have a physical shop".');
+}
+const ok = await saveStore({
+  description: form.description,
+  businessType: form.businessType,
+  state: form.state,
+  city: form.city,
+  address: form.address,
+  hasPhysicalStore: form.hasPhysicalStore,
+  mapLink: form.mapLink,
+});
       if (ok) next(4);
     } else if (step === 4) {
       const ok = await saveStore({
@@ -534,17 +542,20 @@ const StoreSetup = () => {
                 </Field>
 
                 <div className="grid sm:grid-cols-2 gap-5">
-                  <Field id="state" label="State">
-                    <input id="state" type="text" list="ng-states" autoComplete="address-level1" value={form.state} onChange={set('state')} className={inputClass} placeholder="e.g. Oyo" />
-                    <datalist id="ng-states">{NG_STATES.map((s) => <option key={s} value={s} />)}</datalist>
-                  </Field>
+             <LocationFields
+  idPrefix="setup"
+  values={form}
+  onChange={(field, value) => setForm((f) => ({ ...f, [field]: value }))}
+/>
                   <Field id="city" label="City or town">
                     <input id="city" type="text" autoComplete="address-level2" value={form.city} onChange={set('city')} className={inputClass} placeholder="e.g. Ibadan" />
                   </Field>
                 </div>
-                <Field id="address" label="Address (optional)" hint="Only add this if customers can visit or pick up.">
-                  <input id="address" type="text" maxLength={200} autoComplete="street-address" value={form.address} onChange={set('address')} className={inputClass} />
-                </Field>
+       <LocationFields
+  idPrefix="setup"
+  values={form}
+  onChange={(field, value) => setForm((f) => ({ ...f, [field]: value }))}
+/>
               </div>
               <UploadBar />
               <Footer primary="Save and continue" onPrimary={() => submitStep()} />
