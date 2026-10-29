@@ -45,6 +45,11 @@ const StorePreview = ({ store, products = [] }) => {
             ) : (
               <p className="text-sm text-gray-400 italic mt-2">Your store description will appear here.</p>
             )}
+            {store?.hasPhysicalStore && store?.location?.address && (
+  <p className="text-xs text-gray-500 mt-2 flex items-start justify-center sm:justify-start">
+    <MapPin className="w-3.5 h-3.5 mr-1 mt-0.5 flex-shrink-0" /> Visit us: {store.location.address}
+  </p>
+)}
             {social.length > 0 && (
               <div className="flex flex-wrap justify-center sm:justify-start gap-1.5 mt-3">
                 {social.map(([key]) => (
