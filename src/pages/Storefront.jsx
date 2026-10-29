@@ -5,13 +5,14 @@ import api from '../api/axios';
 import { formatMoney } from '../utils/money';
 import { normalizeWhatsapp, buildWhatsAppUrl } from '../utils/whatsapp';
 import WhatsAppButton from '../components/WhatsAppButton';
+import StoreLocation from '../components/StoreLocation';
 
 const getOptions = (value) => {
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
   if (value === null || value === undefined) return [];
   return String(value).split(',').map((s) => s.trim()).filter(Boolean);
 };
-
+const place = [store?.location?.city, store?.location?.state].filter(Boolean).join(', ');
 const getCategoryName = (cat) => {
   if (!cat) return 'Uncategorized';
   return typeof cat === 'object' ? (cat.name || 'Uncategorized') : 'Uncategorized';
@@ -238,6 +239,11 @@ const Storefront = () => {
               {store.description && (
                 <p className="text-gray-600 mt-2 text-sm sm:text-base leading-relaxed max-w-2xl break-words">{store.description}</p>
               )}
+              {place && (
+  <p className="inline-flex items-center text-xs font-semibold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full mt-3">
+    <MapPin className="w-3 h-3 mr-1" /> {place}
+  </p>
+)}
             </div>
             <div className="sm:mt-6 sm:ml-auto w-full sm:w-auto z-10">
               {contactUrl ? (
@@ -262,6 +268,7 @@ const Storefront = () => {
             <button onClick={() => setLinkNotice('')} aria-label="Dismiss" className="text-amber-700 hover:text-amber-900"><X className="w-4 h-4" /></button>
           </div>
         )}
+        <StoreLocation store={store} />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 sm:mb-6 gap-3 sm:gap-4">
           <div className="flex items-center flex-wrap gap-y-2">
