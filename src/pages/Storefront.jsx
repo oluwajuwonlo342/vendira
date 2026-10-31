@@ -11,12 +11,14 @@ import {
   AlertCircle,
   MapPin,
   CornerDownRight,
+  Maximize2,
 } from 'lucide-react';
 import api from '../api/axios';
 import { formatMoney } from '../utils/money';
 import { normalizeWhatsapp, buildWhatsAppUrl } from '../utils/whatsapp';
 import WhatsAppButton from '../components/WhatsAppButton';
 import StoreLocation from '../components/StoreLocation';
+import ImageLightbox from '../components/ImageLightbox';
 
 const getOptions = (value) => {
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
@@ -58,8 +60,14 @@ const Storefront = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedVariations, setSelectedVariations] = useState({});
   const [activeImage, setActiveImage] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [linkNotice, setLinkNotice] = useState('');
   const handledLink = useRef(null);
+
+  // Lets the product sheet's Escape handler know the full-screen viewer is open,
+  // so Escape closes only the viewer and not the sheet behind it
+  const lightboxOpenRef = useRef(false);
+  lightboxOpenRef.current = lightboxOpen;
 
   const [feedbackData, setFeedbackData] = useState({ customerName: '', rating: 5, comment: '' });
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
@@ -93,6 +101,7 @@ const Storefront = () => {
     handledLink.current = product._id;
     setSelectedProduct(product);
     setActiveImage(0);
+    setLightboxOpen(false);
     setFeedbackMsg({ type: '', text: '' });
     setFeedbackData({ customerName: '', rating: 5, comment: '' });
 
@@ -108,6 +117,7 @@ const Storefront = () => {
   };
 
   const handleCloseModal = () => {
+    setLightboxOpen(false);
     setSelectedProduct(null);
     setSelectedVariations({});
     setSearchParams({}, { replace: true });
@@ -132,7 +142,9 @@ const Storefront = () => {
   // Modal: Escape closes it and the page behind stops scrolling
   useEffect(() => {
     if (!selectedProduct) return;
-    const onKeyDown = (e) => { if (e.key === 'Escape') handleCloseModal(); };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' && !lightboxOpenRef.current) handleCloseModal();
+    };
     document.addEventListener('keydown', onKeyDown);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -380,9 +392,27 @@ const Storefront = () => {
               {/* Gallery */}
               <div className="w-full md:w-1/2 bg-gray-50 flex flex-col flex-shrink-0 md:overflow-hidden">
                 <div className="h-64 sm:h-80 md:h-auto md:flex-1 md:min-h-[24rem] flex items-center justify-center overflow-hidden">
-                  {modalImages.length > 0
-                    ? <img src={modalImages[activeImage]?.url} alt={selectedProduct.name} className="w-full h-full object-cover" />
-                    : <ShoppingBag className="w-20 h-20 text-gray-300" />}
+                  {modalImages.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setLightboxOpen(true)}
+                      aria-label="View full size photo"
+                      className="relative w-full h-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#25D366]"
+                    >
+                      <img
+                        src={modalImages[activeImage]?.url}
+                        alt={selectedProduct.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-black/60 text-white text-xs font-semibold px-2.5 py-1.5 rounded-full pointer-events-none">
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        {modalImages.length > 1 ? `${activeImage + 1}/${modalImages.length}` : 'Tap to enlarge'}
+                        {modalImages.length > 1 && <span className="hidden sm:inline">· Click to enlarge</span>}
+                      </span>
+                    </button>
+                  ) : (
+                    <ShoppingBag className="w-20 h-20 text-gray-300" />
+                  )}
                 </div>
                 {modalImages.length > 1 && (
                   <div className="flex gap-2 p-3 overflow-x-auto bg-white border-t border-gray-100">
@@ -518,6 +548,17 @@ const Storefront = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* FULL-SCREEN PHOTO VIEWER: sits above the product sheet */}
+      {selectedProduct && lightboxOpen && modalImages.length > 0 && (
+        <ImageLightbox
+          images={modalImages}
+          index={Math.min(activeImage, modalImages.length - 1)}
+          onIndexChange={setActiveImage}
+          onClose={() => setLightboxOpen(false)}
+          alt={selectedProduct.name}
+        />
       )}
 
     </div>
