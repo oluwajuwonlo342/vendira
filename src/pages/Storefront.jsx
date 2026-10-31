@@ -1,6 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { MessageCircle, ShoppingBag, Store as StoreIcon, Search, X, ChevronRight, Star, AlertCircle, MapPin } from 'lucide-react';
+import {
+  MessageCircle,
+  ShoppingBag,
+  Store as StoreIcon,
+  Search,
+  X,
+  ChevronRight,
+  Star,
+  AlertCircle,
+  MapPin,
+  CornerDownRight,
+} from 'lucide-react';
 import api from '../api/axios';
 import { formatMoney } from '../utils/money';
 import { normalizeWhatsapp, buildWhatsAppUrl } from '../utils/whatsapp';
@@ -12,6 +23,7 @@ const getOptions = (value) => {
   if (value === null || value === undefined) return [];
   return String(value).split(',').map((s) => s.trim()).filter(Boolean);
 };
+
 const getCategoryName = (cat) => {
   if (!cat) return 'Uncategorized';
   return typeof cat === 'object' ? (cat.name || 'Uncategorized') : 'Uncategorized';
@@ -20,6 +32,7 @@ const getCategoryName = (cat) => {
 const averageRating = (reviews = []) =>
   reviews.length ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0;
 
+// Count a product view once per browser session, so reopening the modal doesn't inflate stats
 const recordViewOnce = (productId) => {
   const key = `vendira_viewed_${productId}`;
   try {
@@ -38,10 +51,6 @@ const Storefront = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  const place = [store?.location?.city, store?.location?.state]
-    .filter(Boolean)
-    .join(', ');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -212,6 +221,9 @@ const Storefront = () => {
   const modalAverage = averageRating(modalReviews);
 
   const storeName = store.name || store.businessName;
+  const place = [store.location?.city, store.location?.state].filter(Boolean).join(', ');
+  const hasPhysicalShop = Boolean(store.hasPhysicalStore) && Boolean(store.location?.address);
+
   const sellerDigits = store.whatsappDigits ?? normalizeWhatsapp(store.whatsappNumber);
   const contactUrl = sellerDigits
     ? buildWhatsAppUrl(
@@ -243,10 +255,10 @@ const Storefront = () => {
                 <p className="text-gray-600 mt-2 text-sm sm:text-base leading-relaxed max-w-2xl break-words">{store.description}</p>
               )}
               {place && (
-  <p className="inline-flex items-center text-xs font-semibold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full mt-3">
-    <MapPin className="w-3 h-3 mr-1" /> {place}
-  </p>
-)}
+                <p className="inline-flex items-center text-xs font-semibold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full mt-3">
+                  <MapPin className="w-3 h-3 mr-1" /> {place}
+                </p>
+              )}
             </div>
             <div className="sm:mt-6 sm:ml-auto w-full sm:w-auto z-10">
               {contactUrl ? (
@@ -271,7 +283,10 @@ const Storefront = () => {
             <button onClick={() => setLinkNotice('')} aria-label="Dismiss" className="text-amber-700 hover:text-amber-900"><X className="w-4 h-4" /></button>
           </div>
         )}
-        <StoreLocation store={store} />
+
+        {/* Address, directions and map: only for stores with a physical shop.
+            Online-only stores already show their city in the header. */}
+        {hasPhysicalShop && <StoreLocation store={store} />}
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 sm:mb-6 gap-3 sm:gap-4">
           <div className="flex items-center flex-wrap gap-y-2">
@@ -456,6 +471,16 @@ const Storefront = () => {
                             <div className="flex flex-shrink-0">{renderStars(rev.rating)}</div>
                           </div>
                           <p className="text-gray-600 text-sm break-words">{rev.comment}</p>
+
+                          {/* The seller's reply, directly under the review */}
+                          {rev.reply?.message && (
+                            <div className="mt-3 ml-2 sm:ml-4 pl-3 border-l-2 border-[#25D366] bg-white rounded-r-lg py-2 pr-3">
+                              <p className="text-xs font-bold text-[#128C7E] flex items-center">
+                                <CornerDownRight className="w-3.5 h-3.5 mr-1 flex-shrink-0" /> Reply from {storeName}
+                              </p>
+                              <p className="text-sm text-gray-700 mt-1 whitespace-pre-line break-words">{rev.reply.message}</p>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
