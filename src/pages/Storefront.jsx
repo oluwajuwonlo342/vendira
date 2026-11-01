@@ -12,13 +12,17 @@ import {
   MapPin,
   CornerDownRight,
   Maximize2,
+  Play,
 } from 'lucide-react';
 import api from '../api/axios';
 import { formatMoney } from '../utils/money';
 import { normalizeWhatsapp, buildWhatsAppUrl } from '../utils/whatsapp';
+import { videoPoster } from '../utils/video';
 import WhatsAppButton from '../components/WhatsAppButton';
 import StoreLocation from '../components/StoreLocation';
 import ImageLightbox from '../components/ImageLightbox';
+import ProductVideo from '../components/ProductVideo';
+import SocialFooter from '../components/SocialFooter';
 
 const getOptions = (value) => {
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
@@ -59,7 +63,7 @@ const Storefront = () => {
 
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedVariations, setSelectedVariations] = useState({});
-  const [activeImage, setActiveImage] = useState(0);
+  const [activeImage, setActiveImage] = useState(0); // position in the gallery: photos first, then the video
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [linkNotice, setLinkNotice] = useState('');
   const handledLink = useRef(null);
@@ -228,7 +232,14 @@ const Storefront = () => {
     );
   }
 
+  // Gallery: photos first, then the product video (if there is one) as the last item
   const modalImages = selectedProduct?.images || [];
+  const modalVideoUrl = selectedProduct?.video?.url || '';
+  const videoIndex = modalVideoUrl ? modalImages.length : -1;
+  const mediaCount = modalImages.length + (modalVideoUrl ? 1 : 0);
+  const currentMedia = Math.min(activeImage, Math.max(mediaCount - 1, 0));
+  const showingVideo = Boolean(modalVideoUrl) && currentMedia === videoIndex;
+
   const modalReviews = selectedProduct?.reviews || [];
   const modalAverage = averageRating(modalReviews);
 
@@ -245,7 +256,7 @@ const Storefront = () => {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans pb-16 sm:pb-20 relative overflow-x-hidden">
+    <div className="min-h-screen min-h-[100dvh] flex flex-col bg-[#F8FAFC] font-sans relative overflow-x-hidden">
 
       {/* STORE HEADER */}
       <div className="bg-white pb-6 sm:pb-8 shadow-sm">
@@ -286,7 +297,7 @@ const Storefront = () => {
       </div>
 
       {/* PRODUCT CATALOGUE */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 sm:mt-10">
+      <div className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 sm:mt-10 pb-16 sm:pb-20">
 
         {linkNotice && (
           <div role="status" className="mb-5 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3.5">
@@ -353,6 +364,12 @@ const Storefront = () => {
                   {p.status === 'limited' && (
                     <span className="absolute top-2 left-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-full">Limited stock</span>
                   )}
+                  {p.video?.url && (
+                    <span className="absolute top-2 right-2 bg-black/60 text-white p-1.5 rounded-full" title="Has a video">
+                      <Play className="w-3 h-3 fill-white" />
+                      <span className="sr-only">Has a video</span>
+                    </span>
+                  )}
                 </div>
                 <div className="p-3 sm:p-5 flex flex-col flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 text-sm sm:text-base leading-tight mb-1 truncate">{p.name}</h3>
@@ -377,6 +394,9 @@ const Storefront = () => {
         )}
       </div>
 
+      {/* FOOTER: social links. Renders nothing when the vendor hasn't added any. */}
+      <SocialFooter links={store.socialLinks} storeName={storeName} />
+
       {/* PRODUCT MODAL: bottom sheet on phones, centered two-column dialog from md up */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-6" role="dialog" aria-modal="true" aria-label={selectedProduct.name}>
@@ -389,10 +409,18 @@ const Storefront = () => {
 
             <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto md:overflow-hidden rounded-t-3xl sm:rounded-3xl">
 
-              {/* Gallery */}
+              {/* Gallery: photos, then the video */}
               <div className="w-full md:w-1/2 bg-gray-50 flex flex-col flex-shrink-0 md:overflow-hidden">
                 <div className="h-64 sm:h-80 md:h-auto md:flex-1 md:min-h-[24rem] flex items-center justify-center overflow-hidden">
-                  {modalImages.length > 0 ? (
+                  {mediaCount === 0 ? (
+                    <ShoppingBag className="w-20 h-20 text-gray-300" />
+                  ) : showingVideo ? (
+                    <ProductVideo
+                      url={modalVideoUrl}
+                      title={`${selectedProduct.name} video`}
+                      className="w-full h-full bg-black"
+                    />
+                  ) : (
                     <button
                       type="button"
                       onClick={() => setLightboxOpen(true)}
@@ -400,32 +428,51 @@ const Storefront = () => {
                       className="relative w-full h-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#25D366]"
                     >
                       <img
-                        src={modalImages[activeImage]?.url}
+                        src={modalImages[currentMedia]?.url}
                         alt={selectedProduct.name}
                         className="w-full h-full object-cover"
                       />
                       <span className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-black/60 text-white text-xs font-semibold px-2.5 py-1.5 rounded-full pointer-events-none">
                         <Maximize2 className="w-3.5 h-3.5" />
-                        {modalImages.length > 1 ? `${activeImage + 1}/${modalImages.length}` : 'Tap to enlarge'}
+                        {modalImages.length > 1 ? `${currentMedia + 1}/${modalImages.length}` : 'Tap to enlarge'}
                         {modalImages.length > 1 && <span className="hidden sm:inline">· Click to enlarge</span>}
                       </span>
                     </button>
-                  ) : (
-                    <ShoppingBag className="w-20 h-20 text-gray-300" />
                   )}
                 </div>
-                {modalImages.length > 1 && (
+
+                {mediaCount > 1 && (
                   <div className="flex gap-2 p-3 overflow-x-auto bg-white border-t border-gray-100">
                     {modalImages.map((img, i) => (
                       <button
                         key={img.public_id || i}
                         onClick={() => setActiveImage(i)}
                         aria-label={`Show photo ${i + 1}`}
-                        className={`w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden border-2 ${i === activeImage ? 'border-[#128C7E]' : 'border-transparent'}`}
+                        className={`w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden border-2 ${i === currentMedia ? 'border-[#128C7E]' : 'border-transparent'}`}
                       >
                         <img src={img.url} alt="" className="w-full h-full object-cover" />
                       </button>
                     ))}
+
+                    {modalVideoUrl && (
+                      <button
+                        onClick={() => setActiveImage(videoIndex)}
+                        aria-label="Play product video"
+                        className={`relative w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden border-2 bg-gray-900 ${showingVideo ? 'border-[#128C7E]' : 'border-transparent'}`}
+                      >
+                        {videoPoster(modalVideoUrl) && (
+                          <img
+                            src={videoPoster(modalVideoUrl)}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        )}
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <Play className="w-5 h-5 text-white fill-white" />
+                        </span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -550,7 +597,7 @@ const Storefront = () => {
         </div>
       )}
 
-      {/* FULL-SCREEN PHOTO VIEWER: sits above the product sheet */}
+      {/* FULL-SCREEN PHOTO VIEWER: sits above the product sheet (photos only, not the video) */}
       {selectedProduct && lightboxOpen && modalImages.length > 0 && (
         <ImageLightbox
           images={modalImages}
