@@ -473,7 +473,7 @@ submitData.append('mapLink', formData.mapLink.trim());
           </div>
         </div>
       )}
-
+<ShortLinkCard />
       <form
         onSubmit={handleSubmit}
         className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-8 space-y-6 sm:space-y-8"
