@@ -17,6 +17,8 @@ import EmptyState from '../../components/EmptyState';
 import { CURRENCIES } from '../../utils/money';
 import { normalizeWhatsapp, buildWhatsAppUrl, WHATSAPP_HELP } from '../../utils/whatsapp';
 import LocationFields from '../../components/LocationFields';
+import ShortLinkCard from '../../components/ShortLinkCard';
+
 
 const MAX_PICK_MB = 15; // reject only absurdly large originals; everything else is shrunk first
 const UPLOAD_TIMEOUT_MS = 120000;
