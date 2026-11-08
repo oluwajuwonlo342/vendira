@@ -3,6 +3,7 @@ const FILLER = new Set([
   'ltd', 'limited', 'enterprises', 'enterprise', 'nig', 'nigeria',
 ]);
 
+
 export const slugify = (text) =>
   text
     .toLowerCase()
@@ -29,4 +30,28 @@ export const suggestSlugs = (name) => {
   const short = clip((core.length ? core : words).join('-'), 20);
   const suffix = String(Math.floor(10 + Math.random() * 90));
   return [...new Set([short, clip(full, 30), `${short}-${suffix}`])].filter(Boolean);
+};
+
+const BRAND_FILLER = new Set([
+  'the', 'and', 'of', 'for', 'a', 'an', 'brand', 'brands', 'store', 'stores',
+  'shop', 'shops', 'ltd', 'limited', 'enterprises', 'enterprise', 'global',
+  'nig', 'nigeria', 'official',
+]);
+
+export const suggestShortNames = (name) => {
+  const words = slugify(name || '')
+    .split('-')
+    .filter((w) => w && !BRAND_FILLER.has(w));
+  if (!words.length) return [];
+
+  const first = words[0];
+  const two = words.slice(0, 2);
+  const options = [
+    first.length >= 4 ? first : two.join('-'), // "adekunle"
+    two.join('-'),                             // "adekunle-iwajomi"
+    two.join(''),                              // "adekunleiwajomi"
+    `${first}${Math.floor(10 + Math.random() * 90)}`, // "adekunle47"
+  ].map((o) => o.slice(0, 20).replace(/-+$/, ''));
+
+  return [...new Set(options)].filter(Boolean);
 };
