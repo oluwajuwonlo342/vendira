@@ -176,3 +176,152 @@ const ShortLinkCard = ({ storeName = '' }) => {
   const shortChars = shortLink ? stripProtocol(shortLink).length : 0;
   const ideas = suggestShortCodes(store.name || store.businessName || store.slug, savedCode);
   const canSave = Boolean(code) && code !== savedCode && check.state === 'available' && !saving;
+  return (
+    <section id="short-link" className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6" aria-label="Short link">
+      <div className="flex items-start gap-3">
+        <div className="bg-emerald-50 text-[#128C7E] p-2.5 rounded-xl flex-shrink-0">
+          <Link2 className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="font-bold text-gray-900">Short link</h3>
+          <p className="text-sm text-gray-500 mt-0.5">A shorter version of your store link that still carries your brand name. Perfect for your bio.</p>
+        </div>
+      </div>
+
+      {notice.text && (
+        <div
+          role="status"
+          className={`mt-4 p-3 rounded-xl flex items-start border text-sm font-medium ${
+            notice.type === 'error' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+          }`}
+        >
+          {notice.type === 'error' ? <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" /> : <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
+          <span className="break-words min-w-0">{notice.text}</span>
+        </div>
+      )}
+
+      {/* The link they have now */}
+      {shortLink ? (
+        <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-xl p-3 sm:p-4">
+          <p className="text-xs font-bold text-emerald-800 mb-1.5">Your short link</p>
+          <p className="font-mono text-sm sm:text-base text-gray-900 break-all">{stripProtocol(shortLink)}</p>
+          <p className="text-xs text-emerald-800 mt-1">
+            {shortChars} characters, {Math.max(longChars - shortChars, 0)} shorter than your full link ({longChars}).
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => copy('bio', stripProtocol(shortLink))}
+              className="flex items-center justify-center px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-bold rounded-xl"
+            >
+              {copied === 'bio' ? <><Check className="w-4 h-4 mr-2" /> Copied!</> : <><Copy className="w-4 h-4 mr-2" /> Copy for my bio</>}
+            </button>
+            <button
+              type="button"
+              onClick={() => copy('full', shortLink)}
+              className="flex items-center justify-center px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-bold rounded-xl"
+            >
+              {copied === 'full' ? <><Check className="w-4 h-4 mr-2 text-emerald-600" /> Copied!</> : <><Copy className="w-4 h-4 mr-2" /> Copy with https://</>}
+            </button>
+          </div>
+          {store.isPublished === false && (
+            <p className="text-xs text-amber-700 mt-3">Your store isn't published yet, so this link shows "Store not found" until you publish it.</p>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 bg-gray-50 border border-gray-100 rounded-xl p-3">
+          <p className="text-xs text-gray-500">Your link right now ({longChars} characters)</p>
+          <p className="font-mono text-xs sm:text-sm text-gray-700 break-all mt-0.5">{stripProtocol(longLink)}</p>
+        </div>
+      )}
+
+      {/* Choose or change the short name */}
+      <div className="mt-5">
+        <label htmlFor="short-code" className="block text-sm font-semibold text-gray-700 mb-1">
+          {savedCode ? 'Change your short name' : 'Choose your short name'}
+        </label>
+        <div className="flex flex-col sm:flex-row rounded-xl shadow-sm overflow-hidden border border-gray-300 focus-within:ring-2 focus-within:ring-[#25D366] focus-within:border-[#25D366]">
+          <span className="px-3 py-2 sm:py-0 sm:flex sm:items-center bg-gray-50 text-gray-500 text-xs sm:text-sm border-b sm:border-b-0 sm:border-r border-gray-300 truncate sm:max-w-[60%]">
+            {host}/
+          </span>
+          <input
+            id="short-code"
+            type="text"
+            value={input}
+            maxLength={SHORT_MAX + 2}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            onChange={(e) => setInput(e.target.value)}
+            className={inputClass}
+            placeholder="e.g. gadgethub"
+            aria-describedby="short-code-status"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSuggest}
+          disabled={!brandName}
+          className="mt-2 inline-flex items-center text-xs font-bold text-[#128C7E] hover:text-[#075E54] disabled:text-gray-400 disabled:cursor-not-allowed"
+        >
+          <Sparkles className="w-3.5 h-3.5 mr-1" />
+          {suggestIdx === 0 ? 'Suggest a short brand name' : 'Suggest another'}
+        </button>
+
+        <p id="short-code-status" className="text-xs mt-1.5 min-h-[1rem]" aria-live="polite">
+          {check.state === 'checking' && <span className="text-gray-500">Checking...</span>}
+          {check.state === 'available' && <span className="text-emerald-700 font-semibold">{host}/{code} is available.</span>}
+          {check.state === 'current' && <span className="text-gray-500">This is your current short link.</span>}
+          {(check.state === 'unavailable' || check.state === 'error') && <span className="text-red-600">{check.message}</span>}
+          {check.state === 'idle' && <span className="text-gray-500">{SHORT_MAX} characters at most. Letters, numbers and hyphens.</span>}
+        </p>
+
+        {ideas.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <span className="text-xs text-gray-500">Ideas:</span>
+            {ideas.map((idea) => (
+              <button
+                key={idea}
+                type="button"
+                onClick={() => setInput(idea)}
+                className="text-xs font-bold text-[#128C7E] bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-full"
+              >
+                {idea}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {savedCode && code !== savedCode && code && (
+          <p className="text-xs text-amber-600 mt-3">
+            Changing your short name breaks the old short link anywhere you've already shared it.
+          </p>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-2 mt-4">
+          <button
+            type="button"
+            onClick={() => save(code)}
+            disabled={!canSave}
+            className="flex items-center justify-center px-6 py-3 bg-[#128C7E] hover:bg-[#075E54] text-white font-bold rounded-xl text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving...' : savedCode ? 'Save new short link' : 'Create short link'}
+          </button>
+          {savedCode && (
+            <button
+              type="button"
+              onClick={removeShortLink}
+              disabled={saving}
+              className="px-6 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-red-600 font-bold rounded-xl text-sm disabled:opacity-60"
+            >
+              Remove short link
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default ShortLinkCard;
