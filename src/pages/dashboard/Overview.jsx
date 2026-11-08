@@ -55,6 +55,17 @@ const readDismissed = () => {
     return false;
   }
 };
+// 1. With the other useState lines
+const [shortCode, setShortCode] = useState('');
+
+// 2. In fetchDashboardData, inside the `if (storeData) {` block
+setShortCode(storeData.shortCode || '');
+
+// 3. Replace the `const storeUrl = ...` line with:
+const storeUrl = storeSlug && isLive
+  ? `${window.location.origin}${shortCode ? `/${shortCode}` : `/store/${storeSlug}`}`
+  : '';
+
 
 const Overview = () => {
   const [storeName, setStoreName] = useState('Vendor');
@@ -298,6 +309,7 @@ const Overview = () => {
                 ) : (
                   <><Copy className="w-4 h-4 mr-2" /> Copy link</>
                 )}
+
               </button>
             </div>
 
@@ -306,6 +318,12 @@ const Overview = () => {
                 Your browser blocked copying. Tap the link above, select all, and copy it.
               </p>
             )}
+{!shortCode && (
+  <p className="text-xs text-gray-500 mt-2">
+    Link too long for your bio?{' '}
+    <Link to="/dashboard/store" className="font-bold text-[#128C7E] underline">Create a short link</Link>
+  </p>
+)}
 
             {/* Share buttons */}
             <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row gap-2 sm:gap-3">
