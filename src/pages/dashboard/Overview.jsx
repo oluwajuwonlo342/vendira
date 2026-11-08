@@ -260,5 +260,216 @@ const Overview = () => {
       {/* SETUP PROGRESS */}
       <SetupProgressCard />
 
+      {/* SHARE YOUR STORE */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-8">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="bg-emerald-50 text-[#128C7E] p-2.5 rounded-xl flex-shrink-0">
+            <Share2 className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Share your store</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Send this link to customers, or put it in your WhatsApp status and social bios.
+            </p>
+          </div>
+        </div>
 
+        {storeUrl ? (
+          <>
+            {/* Link + copy */}
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <input
+                type="text"
+                readOnly
+                value={storeUrl}
+                aria-label="Your store link"
+                onFocus={(e) => e.target.select()}
+                className="flex-1 min-w-0 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-base sm:text-sm text-gray-700 font-mono truncate focus:outline-none focus:ring-2 focus:ring-[#25D366]"
+              />
+              <button
+                onClick={handleCopy}
+                className={`flex items-center justify-center px-5 py-3 rounded-xl font-bold text-sm transition-colors sm:w-36 ${
+                  copyState === 'copied'
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : copyState === 'failed'
+                      ? 'bg-red-50 text-red-600'
+                      : 'bg-gray-900 hover:bg-gray-800 text-white'
+                }`}
+              >
+                {copyState === 'copied' ? (
+                  <><Check className="w-4 h-4 mr-2" /> Copied!</>
+                ) : copyState === 'failed' ? (
+                  'Copy manually'
+                ) : (
+                  <><Copy className="w-4 h-4 mr-2" /> Copy link</>
+                )}
+              </button>
+            </div>
+
+            {copyState === 'failed' && (
+              <p className="text-xs text-red-600 mt-2">
+                Your browser blocked copying. Tap the link above, select all, and copy it.
+              </p>
+            )}
+
+            {!shortCode && (
+              <p className="text-xs text-gray-500 mt-2">
+                Link too long for your bio?{' '}
+                <Link to="/dashboard/store" className="font-bold text-[#128C7E] underline">Create a short link</Link>
+              </p>
+            )}
+
+            {/* Share buttons */}
+            <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <button
+                onClick={handleWhatsAppShare}
+                className="flex-1 sm:flex-none flex items-center justify-center px-5 py-3 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold rounded-xl text-sm transition-colors"
+              >
+                <MessageCircle className="w-5 h-5 mr-2" /> Share on WhatsApp
+              </button>
+
+              {canNativeShare && (
+                <button
+                  onClick={handleNativeShare}
+                  className="flex-1 sm:flex-none flex items-center justify-center px-5 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold rounded-xl text-sm transition-colors"
+                >
+                  <Share2 className="w-4 h-4 mr-2" /> More options
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center">
+            <p className="text-sm text-gray-600">
+              {storeSlug ? 'Publish your store to get your shareable link.' : 'Set up your store to get your shareable link.'}
+            </p>
+            <Link to="/dashboard/setup" className="inline-block mt-3 px-5 py-2.5 bg-[#128C7E] hover:bg-[#075E54] text-white text-sm font-bold rounded-xl transition-colors">
+              {storeSlug ? 'Finish and publish' : 'Set up my store'}
+            </Link>
+          </div>
+        )}
+      </div>
+      {/* STATS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center hover:shadow-md transition-shadow">
+          <div className="bg-emerald-50 p-3.5 sm:p-4 rounded-xl text-[#128C7E] mr-4 sm:mr-5">
+            <Package className="w-6 h-6 sm:w-7 sm:h-7" />
+          </div>
+          <div>
+            <p className="text-gray-500 text-sm font-semibold">Total Products</p>
+            <h3 className="text-2xl font-black text-gray-900">{stats.products.toLocaleString()}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center hover:shadow-md transition-shadow">
+          <div className="bg-blue-50 p-3.5 sm:p-4 rounded-xl text-blue-600 mr-4 sm:mr-5">
+            <TrendingUp className="w-6 h-6 sm:w-7 sm:h-7" />
+          </div>
+          <div>
+            <p className="text-gray-500 text-sm font-semibold">Product Views</p>
+            <h3 className="text-2xl font-black text-gray-900">{stats.views.toLocaleString()}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center hover:shadow-md transition-shadow sm:col-span-2 lg:col-span-1">
+          <div className="bg-green-50 p-3.5 sm:p-4 rounded-xl text-[#25D366] mr-4 sm:mr-5">
+            <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-gray-500 text-sm font-semibold">WhatsApp Clicks</p>
+            <h3 className="text-2xl font-black text-gray-900">{stats.clicks.toLocaleString()}</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {waRecent !== null ? `${waRecent.toLocaleString()} in the last 7 days. ` : ''}
+              Taps on the button, not confirmed orders.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* QUICK ACTIONS */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-8">
+        <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-5 sm:mb-6">Quick Actions</h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <Link to="/dashboard/products" className="group flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed border-gray-200 rounded-xl hover:border-[#25D366] hover:bg-emerald-50 transition-all text-center">
+            <PlusCircle className="w-8 h-8 text-gray-400 group-hover:text-[#25D366] mb-3 transition-colors" />
+            <span className="font-bold text-gray-700 group-hover:text-gray-900">Add New Product</span>
+            <span className="text-xs text-gray-500 mt-1">Upload items to your catalogue</span>
+          </Link>
+
+          <Link to="/dashboard/store" className="group flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-dashed border-gray-200 rounded-xl hover:border-[#128C7E] hover:bg-emerald-50 transition-all text-center">
+            <Store className="w-8 h-8 text-gray-400 group-hover:text-[#128C7E] mb-3 transition-colors" />
+            <span className="font-bold text-gray-700 group-hover:text-gray-900">Edit Store Profile</span>
+            <span className="text-xs text-gray-500 mt-1">Update your name & number</span>
+          </Link>
+
+          {storeSlug && isLive ? (
+            <a href={shortCode ? `/${shortCode}` : `/store/${storeSlug}`} target="_blank" rel="noopener noreferrer" className="group flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-gray-100 bg-gray-50 rounded-xl hover:border-gray-300 hover:bg-gray-100 transition-all text-center min-w-0">
+              <ExternalLink className="w-8 h-8 text-gray-500 group-hover:text-gray-700 mb-3 transition-colors" />
+              <span className="font-bold text-gray-700 group-hover:text-gray-900">View Public Store</span>
+              <span className="text-xs mt-1 text-[#128C7E] truncate max-w-full">/{shortCode || storeSlug}</span>
+            </a>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-5 sm:p-6 border-2 border-gray-100 bg-gray-50 rounded-xl text-center opacity-60">
+              <ExternalLink className="w-8 h-8 text-gray-300 mb-3" />
+              <span className="font-bold text-gray-400">View Public Store</span>
+              <span className="text-xs text-gray-400 mt-1">Publish your store first</span>
+            </div>
+          )}
+        </div>
+      </div>
+      {/* HELP POPUP: slides up from the bottom corner */}
+      {helpEligible && (
+        <div
+          role="dialog"
+          aria-label="Need help getting started?"
+          className={`fixed z-10 left-4 right-4 sm:left-auto sm:right-6 sm:w-[22rem] bottom-[max(1rem,env(safe-area-inset-bottom))] sm:bottom-6 transition-all duration-300 ease-out ${
+            helpOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6 pointer-events-none'
+          }`}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl border border-emerald-100 p-4 sm:p-5 relative">
+            <button
+              onClick={dismissHelp}
+              aria-label="Close"
+              className="absolute top-2.5 right-2.5 p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-start gap-3 pr-6">
+              <div className="bg-emerald-50 text-[#128C7E] p-2.5 rounded-xl flex-shrink-0">
+                <PlayCircle className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-gray-900">Feeling confused?</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Watch {tutorialCount === 1 ? 'our short video tutorial' : `our ${tutorialCount} short video tutorials`} to learn how to set up your store and start getting orders.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <Link
+                to="/dashboard/guide"
+                onClick={dismissHelp}
+                className="flex-1 flex items-center justify-center px-4 py-2.5 bg-[#128C7E] hover:bg-[#075E54] text-white text-sm font-bold rounded-xl transition-colors"
+              >
+                Watch tutorials
+              </Link>
+              <button
+                onClick={dismissHelp}
+                className="px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 text-sm font-bold rounded-xl transition-colors"
+              >
+                Maybe later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+export default Overview;
 
