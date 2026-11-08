@@ -13,6 +13,8 @@ import AdminLogin from './pages/admin/AdminLogin';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import TutorialVideo from './components/TutorialVideo';
+import ShortStore from './pages/ShortStore';
+
 
 
 function App() {
@@ -43,7 +45,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/tutorial-video" element={<TutorialVideo />} />
 <Route path="/reset-password/:token" element={<ResetPassword />} />
-
+<Route path="/:code" element={<ShortStore />} />
           {/* =========================================
               PUBLIC CUSTOMER STOREFRONTS
               ========================================= */}
