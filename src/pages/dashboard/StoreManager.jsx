@@ -620,3 +620,114 @@ const StoreManager = () => {
             )}
           </div>
         </div>
+        {/* WhatsApp number */}
+        <div>
+          <label htmlFor="whatsappNumber" className="block text-sm font-semibold text-gray-700 mb-1">WhatsApp Number for Orders</label>
+          <input
+            id="whatsappNumber"
+            type="tel"
+            inputMode="tel"
+            name="whatsappNumber"
+            required
+            autoComplete="tel"
+            value={formData.whatsappNumber}
+            onChange={handleChange}
+            className={`${inputClass} md:w-1/2 ${waTyped && !waDigits ? 'border-red-400 focus:ring-red-300 focus:border-red-400' : ''}`}
+            placeholder="08012345678"
+            aria-invalid={waTyped && !waDigits}
+          />
+          {waDigits ? (
+            <p className="text-xs text-emerald-700 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>Customers will chat with <strong>+{waDigits}</strong>.</span>
+              <a
+                href={buildWhatsAppUrl(waDigits, 'Test message from my Vendira store settings.')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold underline inline-flex items-center"
+              >
+                <ExternalLink className="w-3 h-3 mr-1" /> Test this number
+              </a>
+            </p>
+          ) : waTyped ? (
+            <p className="text-xs text-red-600 mt-1.5">{WHATSAPP_HELP}</p>
+          ) : (
+            <p className="text-xs text-gray-500 mt-1.5">Outside Nigeria? Start with + and the country code, for example +233201234567.</p>
+          )}
+        </div>
+
+        {/* Currency + button wording */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
+          <div>
+            <label htmlFor="currency" className="block text-sm font-semibold text-gray-700 mb-1">Currency</label>
+            <select id="currency" name="currency" value={formData.currency} onChange={handleChange} className={`${inputClass} bg-white`}>
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Used for prices on your store and in WhatsApp messages. It does not convert prices you've already set.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="whatsappCta" className="block text-sm font-semibold text-gray-700 mb-1">WhatsApp button says</label>
+            <select id="whatsappCta" name="whatsappCta" value={formData.whatsappCta} onChange={handleChange} className={`${inputClass} bg-white`}>
+              <option value="order">Order on WhatsApp</option>
+              <option value="enquire">Enquire on WhatsApp</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Choose "Enquire" if customers usually ask questions before they buy.</p>
+          </div>
+        </div>
+
+        {/* Business location */}
+        <div>
+          <h3 className="font-bold text-gray-900 mb-3">Business location</h3>
+          <LocationFields
+            idPrefix="store"
+            values={formData}
+            onChange={(field, value) => setFormData((prev) => ({ ...prev, [field]: value }))}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="description" className="block text-sm font-semibold text-gray-700 mb-1">Store Description</label>
+          <textarea
+            id="description"
+            name="description"
+            rows="3"
+            maxLength={500}
+            value={formData.description}
+            onChange={handleChange}
+            className={`${inputClass} resize-y`}
+            placeholder="What do you sell? This appears on your storefront header."
+          />
+          <p className="text-xs text-gray-400 mt-1 text-right">{formData.description.length}/500</p>
+        </div>
+
+        <div className="pt-4 border-t border-gray-100 space-y-3">
+          {saving && hasNewImages && (
+            <div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-[#25D366] transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              <p className="text-xs text-gray-500 mt-1.5">{statusText || `Uploading images... ${progress}%`}</p>
+            </div>
+          )}
+          {saving && !hasNewImages && statusText && <p className="text-xs text-gray-500">{statusText}</p>}
+
+          <div className="flex sm:justify-end">
+            <button
+              type="submit"
+              disabled={saving || preparing}
+              className="w-full sm:w-auto flex items-center justify-center px-6 py-3.5 sm:py-3 bg-[#128C7E] text-white font-bold rounded-xl hover:bg-[#075E54] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366] transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              <Save className="w-5 h-5 mr-2" />
+              {preparing ? 'Preparing image...' : saving ? 'Saving...' : 'Save Store Details'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+export default StoreManager;
