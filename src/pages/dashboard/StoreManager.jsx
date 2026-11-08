@@ -498,7 +498,7 @@ const StoreManager = () => {
         </div>
       )}
 
-      <ShortLinkCard />
+     <ShortLinkCard storeName={formData.name} />
 
       <form
         onSubmit={handleSubmit}
