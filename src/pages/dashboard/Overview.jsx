@@ -189,3 +189,76 @@ const Overview = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="animate-pulse space-y-6 sm:space-y-8 max-w-6xl mx-auto">
+        <div className="h-40 bg-gray-200 rounded-3xl w-full"></div>
+        <div className="h-32 bg-gray-200 rounded-2xl w-full"></div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+          <div className="h-24 bg-gray-200 rounded-2xl"></div>
+          <div className="h-24 bg-gray-200 rounded-2xl"></div>
+          <div className="h-24 bg-gray-200 rounded-2xl"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8 pb-12">
+
+      {/* HERO GREETING */}
+      <div className="bg-gradient-to-r from-[#128C7E] to-[#25D366] rounded-3xl p-5 sm:p-10 text-white shadow-lg relative overflow-hidden">
+        <div className="absolute top-0 right-0 -mr-8 -mt-8 w-64 h-64 rounded-full bg-white opacity-10 blur-2xl"></div>
+        <div className="absolute bottom-0 right-20 w-32 h-32 rounded-full bg-white opacity-10 blur-xl"></div>
+
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-5 sm:gap-6">
+          <div className="min-w-0">
+            <p className="text-emerald-100 font-semibold tracking-wide uppercase text-xs sm:text-sm mb-1">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
+            <h1 className="text-2xl sm:text-4xl font-extrabold mb-2 break-words">
+              {getGreeting()}, {storeName}! 👋
+            </h1>
+            <p className="text-emerald-50 max-w-xl text-sm sm:text-base">
+              Welcome to your Vendira control center. Manage your products, update your store settings, and watch your WhatsApp orders roll in.
+            </p>
+            {tutorialCount > 0 && (
+              <Link
+                to="/dashboard/guide"
+                className="inline-flex items-center mt-3 text-sm font-bold text-white underline underline-offset-4 decoration-white/50 hover:decoration-white"
+              >
+                <PlayCircle className="w-4 h-4 mr-1.5" /> Confused? Watch the tutorials
+              </Link>
+            )}
+          </div>
+
+          <button
+            onClick={handleRefreshStats}
+            disabled={refreshing}
+            className="flex items-center justify-center px-4 py-2.5 bg-white/20 hover:bg-white/30 text-white text-sm font-bold rounded-xl backdrop-blur-sm transition-all disabled:opacity-50 w-full sm:w-auto flex-shrink-0"
+          >
+            <RefreshCcw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh Live Stats'}
+          </button>
+        </div>
+      </div>
+
+      {/* WHATSAPP NUMBER WARNING */}
+      {whatsappMissing && (
+        <div role="alert" className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="font-bold text-amber-900 text-sm">Customers can't message you on WhatsApp yet</p>
+            <p className="text-sm text-amber-800 mt-0.5">
+              Your WhatsApp number is missing or not valid, so the WhatsApp button on your store is switched off.{' '}
+              <Link to="/dashboard/store" className="font-bold underline">Fix it now</Link>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* SETUP PROGRESS */}
+      <SetupProgressCard />
+
+
+
