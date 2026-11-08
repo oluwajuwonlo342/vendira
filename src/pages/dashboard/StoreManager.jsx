@@ -499,3 +499,124 @@ const StoreManager = () => {
       )}
 
       <ShortLinkCard />
+
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-8 space-y-6 sm:space-y-8"
+      >
+        {/* Cover Image */}
+        <div>
+          <h3 className="font-bold text-gray-900 mb-2">Store Banner (Cover Image)</h3>
+          <div className="relative w-full h-32 sm:h-48 rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center bg-gray-50 overflow-hidden group cursor-pointer hover:border-[#25D366] transition-colors">
+            {coverPreview ? (
+              <img src={coverPreview} alt="Cover preview" className="w-full h-full object-cover" />
+            ) : (
+              <div className="flex flex-col items-center text-gray-400 px-4 text-center">
+                <ImageIcon className="w-8 h-8 mb-2" />
+                <span className="text-sm">Tap to upload banner (optional)</span>
+              </div>
+            )}
+            <div className="absolute inset-0 bg-black/40 hidden sm:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Camera className="w-8 h-8 text-white" />
+            </div>
+            {coverPreview && (
+              <span className="sm:hidden absolute bottom-2 right-2 bg-black/60 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1">
+                <Camera className="w-3.5 h-3.5" /> Change
+              </span>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              aria-label="Upload store banner"
+              onChange={(e) => pickImage(e, setCoverFile, setCoverPreview, 1600)}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Wide images work best. Photos are shrunk automatically so they upload quickly.
+          </p>
+        </div>
+
+        {/* Logo */}
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 pb-6 border-b border-gray-100 text-center sm:text-left">
+          <div className="relative flex-shrink-0">
+            <div className="relative w-24 h-24 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50 overflow-hidden group cursor-pointer hover:border-[#25D366] transition-colors">
+              {logoPreview ? (
+                <img src={logoPreview} alt="Store logo" className="w-full h-full object-cover" />
+              ) : (
+                <Store className="w-8 h-8 text-gray-400" />
+              )}
+              <div className="absolute inset-0 bg-black/40 hidden sm:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="w-6 h-6 text-white" />
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                aria-label="Upload brand logo"
+                onChange={(e) => pickImage(e, setLogoFile, setLogoPreview, 800)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+            </div>
+            <span className="sm:hidden absolute -bottom-1 -right-1 bg-[#128C7E] text-white p-1.5 rounded-full shadow pointer-events-none">
+              <Camera className="w-3.5 h-3.5" />
+            </span>
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-bold text-gray-900">Brand Logo</h3>
+            <p className="text-sm text-gray-500 mt-1">Upload your business logo. Recommended size: 500x500px.</p>
+            <p className="text-xs text-gray-400 mt-1">JPG, PNG, or WEBP.</p>
+          </div>
+        </div>
+
+        {/* Name + slug */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+          <div>
+            <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-1">Store Name</label>
+            <input
+              id="name"
+              type="text"
+              name="name"
+              required
+              autoComplete="organization"
+              value={formData.name}
+              onChange={handleChange}
+              className={inputClass}
+              placeholder="e.g. My Gadget Hub"
+            />
+          </div>
+          <div className="min-w-0">
+            <label htmlFor="slug" className="block text-sm font-semibold text-gray-700 mb-1">Store URL (Slug)</label>
+            <div className="flex flex-col sm:flex-row rounded-xl shadow-sm overflow-hidden border border-gray-300 focus-within:ring-2 focus-within:ring-[#25D366] focus-within:border-[#25D366]">
+              <span className="px-3 py-2 sm:py-0 sm:flex sm:items-center bg-gray-50 text-gray-500 text-xs sm:text-sm border-b sm:border-b-0 sm:border-r border-gray-300 truncate sm:max-w-[55%]">
+                {window.location.host}/store/
+              </span>
+              <input
+                id="slug"
+                type="text"
+                name="slug"
+                required
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={formData.slug}
+                onChange={handleChange}
+                className="flex-1 min-w-0 w-full px-4 py-3 text-base sm:text-sm focus:outline-none"
+                placeholder="my-gadget-hub"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleSuggestSlug}
+              disabled={!formData.name.trim()}
+              className="mt-2 inline-flex items-center text-xs font-bold text-[#128C7E] hover:text-[#075E54] disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1" />
+              {suggestIdx === 0 ? 'Suggest a short link from my store name' : 'Suggest another'}
+            </button>
+            {slugChanged && (
+              <p className="text-xs text-amber-600 mt-1.5">
+                Changing your URL breaks any links you've already shared. Customers using the old link will see "Store not found".
+              </p>
+            )}
+          </div>
+        </div>
