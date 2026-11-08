@@ -351,3 +351,151 @@ const StoreManager = () => {
       setStatusText('');
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-3xl animate-pulse space-y-6">
+        <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+        <div className="h-96 bg-gray-200 rounded-2xl w-full"></div>
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="max-w-3xl mx-auto text-center bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+        <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+        <p className="text-gray-700 font-semibold">Could not load your store details.</p>
+        <p className="text-sm text-gray-500 mt-1">The server may be waking up or your connection dropped.</p>
+        <button
+          type="button"
+          onClick={retryLoad}
+          className="mt-5 px-6 py-3 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl text-sm transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  // Vendors without a store are guided through setup instead of seeing this form
+  if (!hasStore) {
+    return (
+      <EmptyState
+        icon={Store}
+        title="You haven't set up your store yet"
+        description="We'll guide you step by step. It takes about 3 minutes and your progress is saved as you go."
+        actionLabel="Start store setup"
+        to="/dashboard/setup"
+      />
+    );
+  }
+
+  const hasNewImages = Boolean(logoFile || coverFile);
+
+  return (
+    <div className="max-w-3xl mx-auto pb-8">
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
+          <Store className="w-6 h-6 mr-2 text-[#128C7E] flex-shrink-0" />
+          Store Settings
+        </h2>
+        <p className="text-gray-500 mt-1 text-sm sm:text-base">
+          Configure how customers see your brand and where your orders are sent.
+        </p>
+      </div>
+
+      {message.text && (
+        <div
+          role="status"
+          className={`mb-6 p-3 sm:p-4 rounded-xl flex items-start border ${
+            message.type === 'error'
+              ? 'bg-red-50 text-red-700 border-red-100'
+              : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+          }`}
+        >
+          {message.type === 'error' ? (
+            <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+          ) : (
+            <CheckCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+          )}
+          <span className="text-sm font-medium break-words min-w-0">{message.text}</span>
+        </div>
+      )}
+
+      {/* YOUR STORE LINK */}
+      {storeUrl && !isLive && (
+        <div className="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="font-bold text-amber-900 text-sm">Your store isn't published yet</p>
+            <p className="text-sm text-amber-800 mt-0.5">
+              Customers can't open your store link until you publish it.{' '}
+              <Link to="/dashboard/setup?step=6" className="font-bold underline">Preview and publish</Link>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {storeUrl && isLive && (
+        <div className="mb-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6">
+          <h3 className="font-bold text-gray-900">Your store link</h3>
+          <p className="text-sm text-gray-500 mt-0.5 mb-3">Share this with your customers, or put it in your bio and WhatsApp status.</p>
+
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            <input
+              type="text"
+              readOnly
+              value={storeUrl}
+              aria-label="Your store link"
+              onFocus={(e) => e.target.select()}
+              className="flex-1 min-w-0 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-base sm:text-sm text-gray-700 font-mono truncate focus:outline-none focus:ring-2 focus:ring-[#25D366]"
+            />
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={`flex items-center justify-center px-5 py-3 rounded-xl font-bold text-sm transition-colors sm:w-36 ${
+                copyState === 'copied'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : copyState === 'failed'
+                    ? 'bg-red-50 text-red-600'
+                    : 'bg-gray-900 hover:bg-gray-800 text-white'
+              }`}
+            >
+              {copyState === 'copied' ? (
+                <><Check className="w-4 h-4 mr-2" /> Copied!</>
+              ) : copyState === 'failed' ? (
+                'Copy manually'
+              ) : (
+                <><Copy className="w-4 h-4 mr-2" /> Copy link</>
+              )}
+            </button>
+          </div>
+
+          {copyState === 'failed' && (
+            <p className="text-xs text-red-600 mt-2">
+              Your browser blocked copying. Tap the link above, select all, and copy it.
+            </p>
+          )}
+
+          <div className="mt-2 sm:mt-3 grid grid-cols-2 sm:flex gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={handleWhatsAppShare}
+              className="flex items-center justify-center px-4 sm:px-5 py-3 bg-[#25D366] hover:bg-[#128C7E] text-white font-bold rounded-xl text-sm transition-colors"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+            </button>
+            <a
+              href={storeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center px-4 sm:px-5 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold rounded-xl text-sm transition-colors"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" /> Open store
+            </a>
+          </div>
+        </div>
+      )}
+
+      <ShortLinkCard />
