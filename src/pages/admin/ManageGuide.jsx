@@ -11,15 +11,27 @@ const EMPTY_FORM = { title: '', description: '', videoUrl: '', order: '', isPubl
 const inputClass =
   'w-full px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent';
 
+const AUDIENCE_LABEL = {
+  new: 'new vendors',
+  pending: 'vendors who have not received it yet',
+  all: 'every vendor who has not been emailed in the last 24 hours',
+};
+
 const ManageGuide = () => {
-  const [welcome, setWelcome] = useState({ subject: '', message: '', sendOnRegister: true });
+  const [welcome, setWelcome] = useState({
+    subject: '',
+    message: '',
+    sendOnRegister: true,
+    includeTutorialsOnRegister: true,
+  });
   const [tutorials, setTutorials] = useState([]);
-  const [stats, setStats] = useState({ vendors: 0, pending: 0 });
+  const [stats, setStats] = useState({ vendors: 0, pending: 0, newPending: 0, newDays: 7, publishedTutorials: 0 });
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   const [savingWelcome, setSavingWelcome] = useState(false);
-  const [emailBusy, setEmailBusy] = useState(''); // '' | 'test' | 'pending' | 'all'
+  const [emailBusy, setEmailBusy] = useState(''); // '' | 'test' | 'new' | 'pending' | 'all'
+  const [broadcastTutorials, setBroadcastTutorials] = useState(true); // include the videos in emails you send by hand
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [mode, setMode] = useState('link'); // link | upload
@@ -28,6 +40,9 @@ const ManageGuide = () => {
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [previewId, setPreviewId] = useState(null);
+
+  const noPublished = stats.publishedTutorials === 0;
+  const sendWithTutorials = broadcastTutorials && !noPublished;
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -49,10 +64,12 @@ const ManageGuide = () => {
           subject: data.welcome.subject,
           message: data.welcome.message,
           sendOnRegister: data.welcome.sendOnRegister,
+          includeTutorialsOnRegister: data.welcome.includeTutorialsOnRegister !== false,
         });
+        setBroadcastTutorials((data.stats?.publishedTutorials || 0) > 0);
       }
       setTutorials(data.tutorials || []);
-      setStats(data.stats || { vendors: 0, pending: 0 });
+      setStats((prev) => ({ ...prev, ...(data.stats || {}) }));
     } catch (error) {
       console.error('Load guide failed:', error.response?.status, error.response?.data);
       showMessage('error', describe(error, 'Could not load this page'));
@@ -82,7 +99,12 @@ const ManageGuide = () => {
   const sendTest = async () => {
     setEmailBusy('test');
     try {
-      const res = await api.post('/guide/admin/welcome/test', {}, { timeout: 60000 });
+      // The test follows the signup setting, so it shows what a new vendor receives
+      const res = await api.post(
+        '/guide/admin/welcome/test',
+        { includeTutorials: welcome.includeTutorialsOnRegister && !noPublished },
+        { timeout: 60000 }
+      );
       showMessage('success', res.data?.message || 'Test email sent.');
     } catch (error) {
       showMessage('error', describe(error, 'Could not send the test email'));
@@ -92,12 +114,18 @@ const ManageGuide = () => {
   };
 
   const sendToVendors = async (audience) => {
-    const who = audience === 'all' ? 'ALL vendors (including ones who already got it)' : `${stats.pending} vendor(s) who haven't received it`;
-    if (!window.confirm(`Send the welcome email to ${who}? Save your message first.`)) return;
+    const count = audience === 'new' ? stats.newPending : audience === 'pending' ? stats.pending : null;
+    const target = count === null ? AUDIENCE_LABEL[audience] : `${count} ${AUDIENCE_LABEL[audience]}`;
+    const content = sendWithTutorials ? 'with the tutorial videos' : 'without the tutorial videos';
+    if (!window.confirm(`Send the welcome email ${content} to ${target}? Your saved message is what gets sent, so save any changes first.`)) return;
 
     setEmailBusy(audience);
     try {
-      const res = await api.post('/guide/admin/welcome/send', { audience }, { timeout: 120000 });
+      const res = await api.post(
+        '/guide/admin/welcome/send',
+        { audience, includeTutorials: sendWithTutorials },
+        { timeout: 120000 }
+      );
       const { sent, failed, remaining } = res.data?.data || {};
       showMessage(
         failed ? 'error' : 'success',
@@ -183,6 +211,7 @@ const ManageGuide = () => {
       body.append('isPublished', String(!t.isPublished));
       await api.put(`/guide/admin/tutorials/${t._id}`, body);
       setTutorials((prev) => prev.map((x) => (x._id === t._id ? { ...x, isPublished: !t.isPublished } : x)));
+      setStats((prev) => ({ ...prev, publishedTutorials: Math.max(prev.publishedTutorials + (t.isPublished ? -1 : 1), 0) }));
     } catch (error) {
       showMessage('error', describe(error, 'Could not update'));
     }
@@ -193,6 +222,7 @@ const ManageGuide = () => {
     try {
       await api.delete(`/guide/admin/tutorials/${t._id}`);
       setTutorials((prev) => prev.filter((x) => x._id !== t._id));
+      if (t.isPublished) setStats((prev) => ({ ...prev, publishedTutorials: Math.max(prev.publishedTutorials - 1, 0) }));
       if (editingId === t._id) resetForm();
     } catch (error) {
       showMessage('error', describe(error, 'Could not delete'));
@@ -214,7 +244,7 @@ const ManageGuide = () => {
       <div>
         <h2 className="text-xl sm:text-2xl font-black text-slate-900">Welcome & Tutorials</h2>
         <p className="text-slate-500 mt-1 text-sm sm:text-base">
-          Write the welcome message and add video tutorials. New vendors get them automatically.
+          Write the welcome message and add video tutorials. Send them to new or existing vendors, with or without the videos.
         </p>
       </div>
 
@@ -238,14 +268,27 @@ const ManageGuide = () => {
           <label htmlFor="welcome-message" className="block text-sm font-semibold text-slate-700 mb-1">Message</label>
           <textarea id="welcome-message" rows="6" required maxLength={3000} value={welcome.message} onChange={(e) => setWelcome({ ...welcome, message: e.target.value })} className={`${inputClass} resize-y`} />
           <p className="text-xs text-slate-400 mt-1">
-            Type <code className="bg-slate-100 px-1 rounded">{'{{name}}'}</code> to insert the vendor's name. The tutorial list and a "Watch the tutorials" button are added automatically.
+            Type <code className="bg-slate-100 px-1 rounded">{'{{name}}'}</code> to insert the vendor's name. When tutorials are included, the list and a "Watch the tutorials" button are added for you.
           </p>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-slate-700 font-medium">
-          <input type="checkbox" checked={welcome.sendOnRegister} onChange={(e) => setWelcome({ ...welcome, sendOnRegister: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
-          Email this automatically when someone creates an account
-        </label>
+        <div className="space-y-2 bg-slate-50 border border-slate-100 rounded-xl p-3 sm:p-4">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">When someone creates an account</p>
+          <label className="flex items-center gap-2 text-sm text-slate-700 font-medium">
+            <input type="checkbox" checked={welcome.sendOnRegister} onChange={(e) => setWelcome({ ...welcome, sendOnRegister: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
+            Email the welcome message automatically
+          </label>
+          <label className={`flex items-center gap-2 text-sm font-medium ml-6 ${welcome.sendOnRegister ? 'text-slate-700' : 'text-slate-400'}`}>
+            <input
+              type="checkbox"
+              checked={welcome.includeTutorialsOnRegister}
+              disabled={!welcome.sendOnRegister}
+              onChange={(e) => setWelcome({ ...welcome, includeTutorialsOnRegister: e.target.checked })}
+              className="w-4 h-4 accent-emerald-600"
+            />
+            Include the tutorial videos in that email
+          </label>
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-3 sm:justify-end pt-1">
           <button type="button" onClick={sendTest} disabled={Boolean(emailBusy)} className="flex items-center justify-center px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm disabled:opacity-60">
@@ -255,23 +298,66 @@ const ManageGuide = () => {
             <Save className="w-4 h-4 mr-2" /> {savingWelcome ? 'Saving...' : 'Save message'}
           </button>
         </div>
+        <p className="text-xs text-slate-400 sm:text-right">The test email uses your last saved message and shows what a new vendor receives.</p>
       </form>
 
-      {/* SEND TO EXISTING VENDORS */}
+      {/* SEND TO VENDORS */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-6">
-        <h3 className="font-bold text-slate-900 flex items-center"><Users className="w-5 h-5 mr-2 text-emerald-600" /> Send to existing vendors</h3>
+        <h3 className="font-bold text-slate-900 flex items-center"><Users className="w-5 h-5 mr-2 text-emerald-600" /> Send to vendors</h3>
         <p className="text-sm text-slate-500 mt-1">
-          {stats.vendors} vendor(s) in total. <strong className="text-slate-800">{stats.pending}</strong> have not received the welcome email yet.
-          Each click sends up to 250 emails.
+          {stats.vendors} vendor(s) in total. Each click sends up to 250 emails, and anyone who has already received it is never emailed twice by accident.
         </p>
-        <div className="flex flex-col sm:flex-row gap-3 mt-4">
-          <button onClick={() => sendToVendors('pending')} disabled={Boolean(emailBusy) || stats.pending === 0} className="flex items-center justify-center px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-            <Send className="w-4 h-4 mr-2" /> {emailBusy === 'pending' ? 'Sending...' : `Send to the ${stats.pending} who haven't got it`}
+
+        <div className="mt-4 bg-slate-50 border border-slate-100 rounded-xl p-3 sm:p-4">
+          <label className={`flex items-start gap-2 text-sm font-medium ${noPublished ? 'text-slate-400' : 'text-slate-700'}`}>
+            <input
+              type="checkbox"
+              checked={sendWithTutorials}
+              disabled={noPublished}
+              onChange={(e) => setBroadcastTutorials(e.target.checked)}
+              className="w-4 h-4 mt-0.5 accent-emerald-600"
+            />
+            <span>
+              Include the tutorial videos
+              <span className="block text-xs font-normal text-slate-400">
+                {noPublished
+                  ? 'No tutorials are published yet, so emails will go out without them.'
+                  : `${stats.publishedTutorials} published tutorial(s) will be listed, with a "Watch the tutorials" button.`}
+              </span>
+            </span>
+          </label>
+          <p className="text-xs text-slate-500 mt-2">
+            {sendWithTutorials
+              ? 'Each email contains your message, the tutorial list and a "Watch the tutorials" button.'
+              : 'Each email contains your message and a "Go to my dashboard" button.'}
+          </p>
+        </div>
+
+        <div className="grid gap-3 mt-4">
+          <button
+            onClick={() => sendToVendors('new')}
+            disabled={Boolean(emailBusy) || stats.newPending === 0}
+            className="flex items-center justify-center px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="w-4 h-4 mr-2" />
+            {emailBusy === 'new' ? 'Sending...' : `Send to new vendors (${stats.newPending}, joined in the last ${stats.newDays} days)`}
           </button>
-          <button onClick={() => sendToVendors('all')} disabled={Boolean(emailBusy) || stats.vendors === 0} className="flex items-center justify-center px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm disabled:opacity-50">
+          <button
+            onClick={() => sendToVendors('pending')}
+            disabled={Boolean(emailBusy) || stats.pending === 0}
+            className="flex items-center justify-center px-5 py-3 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-700 font-bold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {emailBusy === 'pending' ? 'Sending...' : `Send to everyone who hasn't got it (${stats.pending})`}
+          </button>
+          <button
+            onClick={() => sendToVendors('all')}
+            disabled={Boolean(emailBusy) || stats.vendors === 0}
+            className="flex items-center justify-center px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm disabled:opacity-50"
+          >
             {emailBusy === 'all' ? 'Sending...' : 'Resend to everyone'}
           </button>
         </div>
+        <p className="text-xs text-slate-400 mt-2">"Resend to everyone" skips anyone emailed in the last 24 hours.</p>
       </div>
 
       {/* TUTORIAL FORM */}
