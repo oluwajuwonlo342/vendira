@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Store, Search, ExternalLink, AlertCircle, CheckCircle, Package } from 'lucide-react';
+import { Store, Search, ExternalLink, AlertCircle, CheckCircle, Package, Eye } from 'lucide-react';
 import api from '../../api/axios';
 
 const STATE_STYLES = {
@@ -53,6 +53,16 @@ const ProductCount = ({ count }) => (
   <span className={`inline-flex items-center text-sm font-bold ${count === 0 ? 'text-amber-600' : 'text-slate-700'}`}>
     <Package className={`w-4 h-4 mr-1.5 ${count === 0 ? 'text-amber-400' : 'text-slate-400'}`} />
     {count ?? '-'}
+  </span>
+);
+
+const ViewCount = ({ count }) => (
+  <span
+    className={`inline-flex items-center text-sm font-bold ${count === 0 ? 'text-slate-400' : 'text-slate-700'}`}
+    title="Times customers opened this store's products"
+  >
+    <Eye className="w-4 h-4 mr-1.5 text-slate-400" />
+    {typeof count === 'number' ? count.toLocaleString() : '-'}
   </span>
 );
 
@@ -119,6 +129,8 @@ const ManageStores = () => {
     return c;
   }, [stores]);
 
+  const totalViews = useMemo(() => stores.reduce((sum, s) => sum + (s.viewCount || 0), 0), [stores]);
+
   const filteredStores = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return stores.filter((store) => {
@@ -161,7 +173,8 @@ const ManageStores = () => {
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-slate-900">Platform Stores</h2>
           <p className="text-slate-500 mt-1 text-sm sm:text-base">
-            Monitor all vendor storefronts created on Vendira. {stores.length > 0 && `(${stores.length} total)`}
+            Monitor all vendor storefronts created on Vendira.
+            {stores.length > 0 && ` ${stores.length} total, ${totalViews.toLocaleString()} product views.`}
           </p>
         </div>
 
@@ -232,8 +245,13 @@ const ManageStores = () => {
                       <p className="text-xs font-mono text-slate-500 truncate">/store/{store.slug}</p>
                       <div className="mt-1.5"><StateBadge state={state} /></div>
                     </div>
-                    <ProductCount count={store.productCount} />
                   </div>
+
+                  <div className="mt-3 flex items-center gap-5">
+                    <ProductCount count={store.productCount} />
+                    <ViewCount count={store.viewCount} />
+                  </div>
+
                   <div className="mt-3 pt-3 border-t border-slate-50 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-slate-700 truncate">{owner?.name || 'Unknown Vendor'}</p>
@@ -256,6 +274,7 @@ const ManageStores = () => {
                     <th className="px-6 py-4">Store Link</th>
                     <th className="px-6 py-4">Vendor Owner</th>
                     <th className="px-6 py-4">Products</th>
+                    <th className="px-6 py-4" title="Times customers opened this store's products">Views</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -284,6 +303,9 @@ const ManageStores = () => {
                         </td>
                         <td className="px-6 py-4">
                           <ProductCount count={store.productCount} />
+                        </td>
+                        <td className="px-6 py-4">
+                          <ViewCount count={store.viewCount} />
                         </td>
                         <td className="px-6 py-4 text-right">
                           <VisitButton store={store} state={state} />
