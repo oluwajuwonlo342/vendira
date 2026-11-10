@@ -1,38 +1,74 @@
 import { useState, useEffect } from 'react';
 import {
   Video, Mail, Send, Pencil, Trash2, Plus, Save, AlertCircle, CheckCircle,
-  Eye, EyeOff, UploadCloud, Link as LinkIcon, Users,
+  Eye, EyeOff, UploadCloud, Link as LinkIcon, Users, FileText, Zap,
 } from 'lucide-react';
 import api from '../../api/axios';
 import TutorialVideo from '../../components/TutorialVideo';
 
 const EMPTY_FORM = { title: '', description: '', videoUrl: '', order: '', isPublished: true };
+const EMPTY_TEMPLATE = { name: '', subject: '', message: '', buttonLabel: '', buttonUrl: '', includeTutorials: false };
+
+const AUDIENCES = [
+  { value: 'latest', label: 'The latest sign-ups' },
+  { value: 'recent', label: 'Everyone who joined recently' },
+  { value: 'all', label: 'All vendors' },
+  { value: 'no-store', label: "Vendors who haven't set up a store yet" },
+  { value: 'no-product', label: 'Vendors with a store but no products yet' },
+];
 
 const inputClass =
   'w-full px-4 py-3 border border-slate-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent';
 
-const AUDIENCE_LABEL = {
-  new: 'new vendors',
-  pending: 'vendors who have not received it yet',
-  all: 'every vendor who has not been emailed in the last 24 hours',
-};
+const Toggle = ({ checked, onChange, label, hint, disabled = false }) => (
+  <div className={`flex items-start gap-3 ${disabled ? 'opacity-50' : ''}`}>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative mt-0.5 inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${checked ? 'bg-emerald-600' : 'bg-slate-300'}`}
+    >
+      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
+    </button>
+    <span className="text-sm">
+      <span className="font-semibold text-slate-800 block">{label}</span>
+      {hint && <span className="text-xs text-slate-500">{hint}</span>}
+    </span>
+  </div>
+);
 
 const ManageGuide = () => {
-  const [welcome, setWelcome] = useState({
-    subject: '',
-    message: '',
-    sendOnRegister: true,
-    includeTutorialsOnRegister: true,
-  });
+  const [welcome, setWelcome] = useState({ subject: '', message: '', sendOnRegister: true, includeTutorialsOnRegister: true });
+  const [templates, setTemplates] = useState([]);
   const [tutorials, setTutorials] = useState([]);
-  const [stats, setStats] = useState({ vendors: 0, pending: 0, newPending: 0, newDays: 7, publishedTutorials: 0 });
+  const [stats, setStats] = useState({ vendors: 0, welcomeNotSent: 0, publishedTutorials: 0, batchLimit: 250 });
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   const [savingWelcome, setSavingWelcome] = useState(false);
-  const [emailBusy, setEmailBusy] = useState(''); // '' | 'test' | 'new' | 'pending' | 'all'
-  const [broadcastTutorials, setBroadcastTutorials] = useState(true); // include the videos in emails you send by hand
 
+  // templates
+  const [tplForm, setTplForm] = useState(EMPTY_TEMPLATE);
+  const [tplEditing, setTplEditing] = useState(null); // null | 'new' | a template id
+  const [savingTpl, setSavingTpl] = useState(false);
+
+  // sending
+  const [send, setSend] = useState({
+    template: 'welcome',
+    audience: 'latest',
+    count: '5',
+    days: '7',
+    skipAlreadySent: true,
+    includeTutorials: true,
+  });
+  const [preview, setPreview] = useState({ state: 'idle', data: null, message: '' });
+  const [previewTick, setPreviewTick] = useState(0);
+  const [busy, setBusy] = useState(''); // '' | 'test' | 'send'
+
+  // tutorials
   const [form, setForm] = useState(EMPTY_FORM);
   const [mode, setMode] = useState('link'); // link | upload
   const [file, setFile] = useState(null);
@@ -42,7 +78,9 @@ const ManageGuide = () => {
   const [previewId, setPreviewId] = useState(null);
 
   const noPublished = stats.publishedTutorials === 0;
-  const sendWithTutorials = broadcastTutorials && !noPublished;
+  const withTutorials = send.includeTutorials && !noPublished;
+  const selectedTemplateName =
+    send.template === 'welcome' ? 'Welcome email' : templates.find((t) => t._id === send.template)?.name || 'this message';
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -66,8 +104,9 @@ const ManageGuide = () => {
           sendOnRegister: data.welcome.sendOnRegister,
           includeTutorialsOnRegister: data.welcome.includeTutorialsOnRegister !== false,
         });
-        setBroadcastTutorials((data.stats?.publishedTutorials || 0) > 0);
+        setSend((s) => ({ ...s, includeTutorials: data.welcome.includeTutorialsOnRegister !== false }));
       }
+      setTemplates(data.templates || []);
       setTutorials(data.tutorials || []);
       setStats((prev) => ({ ...prev, ...(data.stats || {}) }));
     } catch (error) {
@@ -82,13 +121,42 @@ const ManageGuide = () => {
     refresh(true);
   }, []);
 
-  // ---------- welcome message ----------
+  // Live count of who would receive the message. Late answers are ignored.
+  useEffect(() => {
+    if (loading) return undefined;
+    let cancelled = false;
+    setPreview((p) => ({ ...p, state: 'loading' }));
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.post('/guide/admin/messages/preview', {
+          template: send.template,
+          audience: send.audience,
+          count: Number(send.count) || 5,
+          days: Number(send.days) || 7,
+          skipAlreadySent: send.skipAlreadySent,
+        });
+        if (!cancelled) setPreview({ state: 'ready', data: res.data?.data, message: '' });
+      } catch (error) {
+        if (!cancelled) setPreview({ state: 'error', data: null, message: describe(error, 'Could not check who would receive this') });
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, send.template, send.audience, send.count, send.days, send.skipAlreadySent, previewTick]);
+
+  // ---------- welcome email ----------
   const saveWelcome = async (e) => {
     e.preventDefault();
     setSavingWelcome(true);
     try {
       await api.put('/guide/admin/welcome', welcome);
-      showMessage('success', 'Welcome message saved.');
+      showMessage('success', 'Welcome email saved.');
+      setPreviewTick((n) => n + 1);
     } catch (error) {
       showMessage('error', describe(error, 'Could not save'));
     } finally {
@@ -96,46 +164,126 @@ const ManageGuide = () => {
     }
   };
 
-  const sendTest = async () => {
-    setEmailBusy('test');
+  // ---------- templates ----------
+  const startNewTemplate = () => {
+    setTplForm(EMPTY_TEMPLATE);
+    setTplEditing('new');
+    setTimeout(() => document.getElementById('template-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
+  const startEditTemplate = (t) => {
+    setTplForm({
+      name: t.name,
+      subject: t.subject,
+      message: t.message,
+      buttonLabel: t.buttonLabel || '',
+      buttonUrl: t.buttonUrl || '',
+      includeTutorials: Boolean(t.includeTutorials),
+    });
+    setTplEditing(t._id);
+    setTimeout(() => document.getElementById('template-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
+  const closeTemplateForm = () => {
+    setTplEditing(null);
+    setTplForm(EMPTY_TEMPLATE);
+  };
+
+  const saveTemplate = async (e) => {
+    e.preventDefault();
+    setSavingTpl(true);
     try {
-      // The test follows the signup setting, so it shows what a new vendor receives
+      const isNew = tplEditing === 'new';
+      const res = isNew
+        ? await api.post('/guide/admin/templates', tplForm)
+        : await api.put(`/guide/admin/templates/${tplEditing}`, tplForm);
+      const saved = res.data?.data?.template;
+
+      setTemplates((prev) => (isNew ? [saved, ...prev] : prev.map((t) => (t._id === saved._id ? saved : t))));
+      if (isNew) selectTemplate(saved._id, saved);
+      closeTemplateForm();
+      showMessage('success', isNew ? 'Template created. It is ready to send below.' : 'Template saved.');
+    } catch (error) {
+      showMessage('error', describe(error, 'Could not save the template'));
+    } finally {
+      setSavingTpl(false);
+    }
+  };
+
+  const deleteTemplate = async (t) => {
+    if (!window.confirm(`Delete the template "${t.name}"? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/guide/admin/templates/${t._id}`);
+      setTemplates((prev) => prev.filter((x) => x._id !== t._id));
+      if (send.template === t._id) selectTemplate('welcome');
+      if (tplEditing === t._id) closeTemplateForm();
+    } catch (error) {
+      showMessage('error', describe(error, 'Could not delete the template'));
+    }
+  };
+
+  // ---------- sending ----------
+  const selectTemplate = (key, tpl) => {
+    const found = tpl || templates.find((t) => t._id === key);
+    setSend((s) => ({
+      ...s,
+      template: key,
+      includeTutorials: key === 'welcome' ? welcome.includeTutorialsOnRegister : Boolean(found?.includeTutorials),
+    }));
+  };
+
+  const useTemplateToSend = (t) => {
+    selectTemplate(t._id, t);
+    document.getElementById('send-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const sendTest = async () => {
+    setBusy('test');
+    try {
       const res = await api.post(
-        '/guide/admin/welcome/test',
-        { includeTutorials: welcome.includeTutorialsOnRegister && !noPublished },
+        '/guide/admin/messages/test',
+        { template: send.template, includeTutorials: withTutorials },
         { timeout: 60000 }
       );
       showMessage('success', res.data?.message || 'Test email sent.');
     } catch (error) {
       showMessage('error', describe(error, 'Could not send the test email'));
     } finally {
-      setEmailBusy('');
+      setBusy('');
     }
   };
 
-  const sendToVendors = async (audience) => {
-    const count = audience === 'new' ? stats.newPending : audience === 'pending' ? stats.pending : null;
-    const target = count === null ? AUDIENCE_LABEL[audience] : `${count} ${AUDIENCE_LABEL[audience]}`;
-    const content = sendWithTutorials ? 'with the tutorial videos' : 'without the tutorial videos';
-    if (!window.confirm(`Send the welcome email ${content} to ${target}? Your saved message is what gets sent, so save any changes first.`)) return;
+  const sendMessage = async () => {
+    const p = preview.data;
+    if (!p || p.willSend === 0) return;
+    const content = withTutorials ? 'with the tutorial videos' : 'without the tutorial videos';
+    if (!window.confirm(`Send "${selectedTemplateName}" ${content} to ${p.willSend} vendor${p.willSend === 1 ? '' : 's'}? It uses the last saved version of the template.`)) return;
 
-    setEmailBusy(audience);
+    setBusy('send');
     try {
       const res = await api.post(
-        '/guide/admin/welcome/send',
-        { audience, includeTutorials: sendWithTutorials },
+        '/guide/admin/messages/send',
+        {
+          template: send.template,
+          audience: send.audience,
+          count: Number(send.count) || 5,
+          days: Number(send.days) || 7,
+          skipAlreadySent: send.skipAlreadySent,
+          includeTutorials: withTutorials,
+        },
         { timeout: 120000 }
       );
       const { sent, failed, remaining } = res.data?.data || {};
       showMessage(
         failed ? 'error' : 'success',
-        `Sent ${sent} email(s)${failed ? `, ${failed} failed (check the server logs)` : ''}.${remaining > 0 ? ` ${remaining} more are waiting. Click again to send the next batch.` : ''}`
+        `Sent ${sent} email${sent === 1 ? '' : 's'}${failed ? `, ${failed} failed (check the server logs)` : ''}.${remaining > 0 ? ` ${remaining} more are waiting. Click send again for the next batch.` : ''}`
       );
       refresh();
+      setPreviewTick((n) => n + 1);
     } catch (error) {
       showMessage('error', describe(error, 'Could not send the emails'));
     } finally {
-      setEmailBusy('');
+      setBusy('');
     }
   };
 
@@ -239,12 +387,14 @@ const ManageGuide = () => {
     );
   }
 
+  const p = preview.data;
+
   return (
     <div className="max-w-4xl mx-auto pb-12 space-y-6 sm:space-y-8">
       <div>
-        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Welcome & Tutorials</h2>
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Emails & Tutorials</h2>
         <p className="text-slate-500 mt-1 text-sm sm:text-base">
-          Write the welcome message and add video tutorials. Send them to new or existing vendors, with or without the videos.
+          Set up the welcome email, write your own message templates, and send them to the vendors you choose.
         </p>
       </div>
 
@@ -255,12 +405,28 @@ const ManageGuide = () => {
         </div>
       )}
 
-      {/* WELCOME MESSAGE */}
+      {/* 1. WELCOME EMAIL TEMPLATE */}
       <form onSubmit={saveWelcome} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-6 space-y-4">
-        <h3 className="font-bold text-slate-900 flex items-center"><Mail className="w-5 h-5 mr-2 text-emerald-600" /> Welcome message</h3>
+        <h3 className="font-bold text-slate-900 flex items-center"><Zap className="w-5 h-5 mr-2 text-emerald-600" /> Welcome email for new users</h3>
+
+        <div className="space-y-3 bg-slate-50 border border-slate-100 rounded-xl p-3 sm:p-4">
+          <Toggle
+            checked={welcome.sendOnRegister}
+            onChange={(v) => setWelcome({ ...welcome, sendOnRegister: v })}
+            label="Send this email automatically after someone creates an account"
+            hint={welcome.sendOnRegister ? 'Every new vendor gets it right after signing up.' : "New vendors won't get it automatically. You can still send it by hand below."}
+          />
+          <Toggle
+            checked={welcome.includeTutorialsOnRegister}
+            onChange={(v) => setWelcome({ ...welcome, includeTutorialsOnRegister: v })}
+            label="Include the tutorial videos"
+            hint="Lists your published tutorials and adds a 'Watch the tutorials' button."
+            disabled={!welcome.sendOnRegister}
+          />
+        </div>
 
         <div>
-          <label htmlFor="subject" className="block text-sm font-semibold text-slate-700 mb-1">Email subject</label>
+          <label htmlFor="subject" className="block text-sm font-semibold text-slate-700 mb-1">Subject</label>
           <input id="subject" type="text" required maxLength={150} value={welcome.subject} onChange={(e) => setWelcome({ ...welcome, subject: e.target.value })} className={inputClass} />
         </div>
 
@@ -268,99 +434,201 @@ const ManageGuide = () => {
           <label htmlFor="welcome-message" className="block text-sm font-semibold text-slate-700 mb-1">Message</label>
           <textarea id="welcome-message" rows="6" required maxLength={3000} value={welcome.message} onChange={(e) => setWelcome({ ...welcome, message: e.target.value })} className={`${inputClass} resize-y`} />
           <p className="text-xs text-slate-400 mt-1">
-            Type <code className="bg-slate-100 px-1 rounded">{'{{name}}'}</code> to insert the vendor's name. When tutorials are included, the list and a "Watch the tutorials" button are added for you.
+            Type <code className="bg-slate-100 px-1 rounded">{'{{name}}'}</code> to insert the vendor's name. {stats.welcomeNotSent} vendor(s) have not received this email yet.
           </p>
         </div>
 
-        <div className="space-y-2 bg-slate-50 border border-slate-100 rounded-xl p-3 sm:p-4">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">When someone creates an account</p>
-          <label className="flex items-center gap-2 text-sm text-slate-700 font-medium">
-            <input type="checkbox" checked={welcome.sendOnRegister} onChange={(e) => setWelcome({ ...welcome, sendOnRegister: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
-            Email the welcome message automatically
-          </label>
-          <label className={`flex items-center gap-2 text-sm font-medium ml-6 ${welcome.sendOnRegister ? 'text-slate-700' : 'text-slate-400'}`}>
-            <input
-              type="checkbox"
-              checked={welcome.includeTutorialsOnRegister}
-              disabled={!welcome.sendOnRegister}
-              onChange={(e) => setWelcome({ ...welcome, includeTutorialsOnRegister: e.target.checked })}
-              className="w-4 h-4 accent-emerald-600"
-            />
-            Include the tutorial videos in that email
-          </label>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3 sm:justify-end pt-1">
-          <button type="button" onClick={sendTest} disabled={Boolean(emailBusy)} className="flex items-center justify-center px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm disabled:opacity-60">
-            <Send className="w-4 h-4 mr-2" /> {emailBusy === 'test' ? 'Sending...' : 'Send me a test'}
-          </button>
-          <button type="submit" disabled={savingWelcome} className="flex items-center justify-center px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm disabled:opacity-60">
-            <Save className="w-4 h-4 mr-2" /> {savingWelcome ? 'Saving...' : 'Save message'}
+        <div className="flex sm:justify-end">
+          <button type="submit" disabled={savingWelcome} className="w-full sm:w-auto flex items-center justify-center px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm disabled:opacity-60">
+            <Save className="w-4 h-4 mr-2" /> {savingWelcome ? 'Saving...' : 'Save welcome email'}
           </button>
         </div>
-        <p className="text-xs text-slate-400 sm:text-right">The test email uses your last saved message and shows what a new vendor receives.</p>
       </form>
 
-      {/* SEND TO VENDORS */}
+      {/* 2. MESSAGE TEMPLATES */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-6">
-        <h3 className="font-bold text-slate-900 flex items-center"><Users className="w-5 h-5 mr-2 text-emerald-600" /> Send to vendors</h3>
-        <p className="text-sm text-slate-500 mt-1">
-          {stats.vendors} vendor(s) in total. Each click sends up to 250 emails, and anyone who has already received it is never emailed twice by accident.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-bold text-slate-900 flex items-center"><FileText className="w-5 h-5 mr-2 text-emerald-600" /> Message templates</h3>
+          {tplEditing === null && (
+            <button onClick={startNewTemplate} className="flex items-center px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl">
+              <Plus className="w-4 h-4 mr-1.5" /> New template
+            </button>
+          )}
+        </div>
+        <p className="text-sm text-slate-500 mt-1">Write a message once, then send it whenever you need to: announcements, tips, feature updates.</p>
 
-        <div className="mt-4 bg-slate-50 border border-slate-100 rounded-xl p-3 sm:p-4">
-          <label className={`flex items-start gap-2 text-sm font-medium ${noPublished ? 'text-slate-400' : 'text-slate-700'}`}>
-            <input
-              type="checkbox"
-              checked={sendWithTutorials}
-              disabled={noPublished}
-              onChange={(e) => setBroadcastTutorials(e.target.checked)}
-              className="w-4 h-4 mt-0.5 accent-emerald-600"
+        {tplEditing !== null && (
+          <form id="template-form" onSubmit={saveTemplate} className="mt-4 space-y-4 border border-emerald-200 bg-emerald-50/40 rounded-xl p-3 sm:p-4 scroll-mt-4">
+            <p className="text-sm font-bold text-slate-800">{tplEditing === 'new' ? 'New template' : 'Edit template'}</p>
+
+            <div>
+              <label htmlFor="tpl-name" className="block text-sm font-semibold text-slate-700 mb-1">Template name <span className="font-normal text-slate-400">(only you see this)</span></label>
+              <input id="tpl-name" type="text" required maxLength={80} value={tplForm.name} onChange={(e) => setTplForm({ ...tplForm, name: e.target.value })} className={inputClass} placeholder="e.g. New feature announcement" />
+            </div>
+            <div>
+              <label htmlFor="tpl-subject" className="block text-sm font-semibold text-slate-700 mb-1">Email subject</label>
+              <input id="tpl-subject" type="text" required maxLength={150} value={tplForm.subject} onChange={(e) => setTplForm({ ...tplForm, subject: e.target.value })} className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="tpl-message" className="block text-sm font-semibold text-slate-700 mb-1">Message</label>
+              <textarea id="tpl-message" rows="6" required maxLength={3000} value={tplForm.message} onChange={(e) => setTplForm({ ...tplForm, message: e.target.value })} className={`${inputClass} resize-y`} placeholder={'Hi {{name}},\n\n...'} />
+              <p className="text-xs text-slate-400 mt-1">Use <code className="bg-slate-100 px-1 rounded">{'{{name}}'}</code> for the vendor's name. {tplForm.message.length}/3000</p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="tpl-btn-label" className="block text-sm font-semibold text-slate-700 mb-1">Button label <span className="font-normal text-slate-400">(optional)</span></label>
+                <input id="tpl-btn-label" type="text" maxLength={40} value={tplForm.buttonLabel} onChange={(e) => setTplForm({ ...tplForm, buttonLabel: e.target.value })} className={inputClass} placeholder="e.g. Try it now" />
+              </div>
+              <div>
+                <label htmlFor="tpl-btn-url" className="block text-sm font-semibold text-slate-700 mb-1">Button link <span className="font-normal text-slate-400">(optional)</span></label>
+                <input id="tpl-btn-url" type="text" inputMode="url" autoCapitalize="none" maxLength={500} value={tplForm.buttonUrl} onChange={(e) => setTplForm({ ...tplForm, buttonUrl: e.target.value })} className={inputClass} placeholder="/dashboard/products or https://..." />
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 -mt-2">A link starting with / opens that page in Vendira, for example /dashboard/store.</p>
+
+            <Toggle
+              checked={tplForm.includeTutorials}
+              onChange={(v) => setTplForm({ ...tplForm, includeTutorials: v })}
+              label="Include the tutorial videos by default"
+              hint="You can still change this each time you send."
             />
-            <span>
-              Include the tutorial videos
-              <span className="block text-xs font-normal text-slate-400">
-                {noPublished
-                  ? 'No tutorials are published yet, so emails will go out without them.'
-                  : `${stats.publishedTutorials} published tutorial(s) will be listed, with a "Watch the tutorials" button.`}
-              </span>
-            </span>
-          </label>
-          <p className="text-xs text-slate-500 mt-2">
-            {sendWithTutorials
-              ? 'Each email contains your message, the tutorial list and a "Watch the tutorials" button.'
-              : 'Each email contains your message and a "Go to my dashboard" button.'}
-          </p>
-        </div>
 
-        <div className="grid gap-3 mt-4">
-          <button
-            onClick={() => sendToVendors('new')}
-            disabled={Boolean(emailBusy) || stats.newPending === 0}
-            className="flex items-center justify-center px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="w-4 h-4 mr-2" />
-            {emailBusy === 'new' ? 'Sending...' : `Send to new vendors (${stats.newPending}, joined in the last ${stats.newDays} days)`}
-          </button>
-          <button
-            onClick={() => sendToVendors('pending')}
-            disabled={Boolean(emailBusy) || stats.pending === 0}
-            className="flex items-center justify-center px-5 py-3 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-700 font-bold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {emailBusy === 'pending' ? 'Sending...' : `Send to everyone who hasn't got it (${stats.pending})`}
-          </button>
-          <button
-            onClick={() => sendToVendors('all')}
-            disabled={Boolean(emailBusy) || stats.vendors === 0}
-            className="flex items-center justify-center px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm disabled:opacity-50"
-          >
-            {emailBusy === 'all' ? 'Sending...' : 'Resend to everyone'}
-          </button>
-        </div>
-        <p className="text-xs text-slate-400 mt-2">"Resend to everyone" skips anyone emailed in the last 24 hours.</p>
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <button type="button" onClick={closeTemplateForm} className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm">Cancel</button>
+              <button type="submit" disabled={savingTpl} className="flex items-center justify-center px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm disabled:opacity-60">
+                <Save className="w-4 h-4 mr-2" /> {savingTpl ? 'Saving...' : 'Save template'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {templates.length === 0 && tplEditing === null ? (
+          <div className="mt-4 border-2 border-dashed border-slate-200 rounded-xl p-6 text-center text-sm text-slate-500">
+            No templates yet. Create one to send announcements to your vendors.
+          </div>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {templates.map((t) => (
+              <li key={t._id} className="border border-slate-100 rounded-xl p-3 sm:p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 break-words">{t.name}</p>
+                    <p className="text-sm text-slate-500 break-words">Subject: {t.subject}</p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-500">Sent to {t.sentCount || 0}</span>
+                      {t.includeTutorials && <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">With tutorials</span>}
+                      {t.buttonLabel && <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-500">Button: {t.buttonLabel}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => useTemplateToSend(t)} className="flex items-center text-sm font-bold text-emerald-700 hover:bg-emerald-50 px-3 py-2 rounded-lg"><Send className="w-4 h-4 mr-1.5" /> Send</button>
+                    <button onClick={() => startEditTemplate(t)} aria-label={`Edit ${t.name}`} className="p-2 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => deleteTemplate(t)} aria-label={`Delete ${t.name}`} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      {/* TUTORIAL FORM */}
+      {/* 3. SEND A MESSAGE */}
+      <div id="send-card" className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-6 space-y-4 scroll-mt-4">
+        <h3 className="font-bold text-slate-900 flex items-center"><Users className="w-5 h-5 mr-2 text-emerald-600" /> Send a message</h3>
+        <p className="text-sm text-slate-500 -mt-2">{stats.vendors} vendor(s) in total. Each click sends up to {stats.batchLimit} emails.</p>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="send-template" className="block text-sm font-semibold text-slate-700 mb-1">Which message?</label>
+            <select id="send-template" value={send.template} onChange={(e) => selectTemplate(e.target.value)} className={`${inputClass} bg-white`}>
+              <option value="welcome">Welcome email (new users)</option>
+              {templates.map((t) => (
+                <option key={t._id} value={t._id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="send-audience" className="block text-sm font-semibold text-slate-700 mb-1">Who gets it?</label>
+            <select id="send-audience" value={send.audience} onChange={(e) => setSend({ ...send, audience: e.target.value })} className={`${inputClass} bg-white`}>
+              {AUDIENCES.map((a) => (
+                <option key={a.value} value={a.value}>{a.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {send.audience === 'latest' && (
+          <div className="max-w-xs">
+            <label htmlFor="send-count" className="block text-sm font-semibold text-slate-700 mb-1">How many of the newest sign-ups?</label>
+            <input id="send-count" type="number" inputMode="numeric" min="1" max={stats.batchLimit} value={send.count} onChange={(e) => setSend({ ...send, count: e.target.value })} className={inputClass} />
+          </div>
+        )}
+        {send.audience === 'recent' && (
+          <div className="max-w-xs">
+            <label htmlFor="send-days" className="block text-sm font-semibold text-slate-700 mb-1">Joined in the last how many days?</label>
+            <input id="send-days" type="number" inputMode="numeric" min="1" max="90" value={send.days} onChange={(e) => setSend({ ...send, days: e.target.value })} className={inputClass} />
+          </div>
+        )}
+
+        <div className="space-y-3 bg-slate-50 border border-slate-100 rounded-xl p-3 sm:p-4">
+          <Toggle
+            checked={withTutorials}
+            onChange={(v) => setSend({ ...send, includeTutorials: v })}
+            label="Include the tutorial videos"
+            hint={noPublished ? 'No tutorials are published yet, so emails will go out without them.' : `${stats.publishedTutorials} published tutorial(s) are listed with a 'Watch the tutorials' button.`}
+            disabled={noPublished}
+          />
+          <Toggle
+            checked={send.skipAlreadySent}
+            onChange={(v) => setSend({ ...send, skipAlreadySent: v })}
+            label="Skip vendors who already received this message"
+            hint={send.skipAlreadySent ? 'Nobody gets the same message twice.' : 'Resending: anyone emailed in the last 24 hours is still skipped.'}
+          />
+        </div>
+
+        {/* Live count */}
+        <div role="status" aria-live="polite" className="rounded-xl border border-slate-200 p-3 sm:p-4 text-sm min-h-[3.5rem]">
+          {preview.state === 'loading' && <span className="text-slate-500">Checking who would receive this...</span>}
+          {preview.state === 'error' && <span className="text-red-600">{preview.message}</span>}
+          {preview.state === 'ready' && p && (
+            p.willSend === 0 ? (
+              <span className="text-slate-600">
+                No one to email with these settings.
+                {p.alreadySent > 0 && ` ${p.alreadySent} already received it.`}
+                {p.optedOut > 0 && ` ${p.optedOut} opted out of announcements.`}
+              </span>
+            ) : (
+              <span className="text-slate-700">
+                <strong className="text-slate-900">{p.willSend} vendor{p.willSend === 1 ? '' : 's'}</strong> will get this email
+                {p.sample.length > 0 && <> (for example {p.sample.join(', ')})</>}.
+                {p.alreadySent > 0 && <span className="text-slate-500"> {p.alreadySent} skipped: already received it.</span>}
+                {p.optedOut > 0 && <span className="text-slate-500"> {p.optedOut} skipped: opted out.</span>}
+                {p.eligible > p.willSend && <span className="text-amber-700"> Sending the first {p.willSend} now; click send again for the other {p.eligible - p.willSend}.</span>}
+              </span>
+            )
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+          <button type="button" onClick={sendTest} disabled={Boolean(busy)} className="flex items-center justify-center px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm disabled:opacity-60">
+            <Mail className="w-4 h-4 mr-2" /> {busy === 'test' ? 'Sending...' : 'Send me a test'}
+          </button>
+          <button
+            type="button"
+            onClick={sendMessage}
+            disabled={Boolean(busy) || preview.state !== 'ready' || !p || p.willSend === 0}
+            className="flex items-center justify-center px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="w-4 h-4 mr-2" />
+            {busy === 'send' ? 'Sending...' : p && p.willSend > 0 ? `Send to ${p.willSend} vendor${p.willSend === 1 ? '' : 's'}` : 'Send'}
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 sm:text-right">Emails use the last saved version of the template. Save your changes first.</p>
+      </div>
+
+      {/* 4. TUTORIAL FORM */}
       <form id="tutorial-form" onSubmit={saveTutorial} className={`bg-white rounded-2xl border shadow-sm p-4 sm:p-6 space-y-4 scroll-mt-4 ${editingId ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-100'}`}>
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-bold text-slate-900 flex items-center">
@@ -430,7 +698,7 @@ const ManageGuide = () => {
         </div>
       </form>
 
-      {/* TUTORIAL LIST */}
+      {/* 5. TUTORIAL LIST */}
       <div>
         <h3 className="font-bold text-slate-900 flex items-center mb-3"><Video className="w-5 h-5 mr-2 text-emerald-600" /> Your tutorials ({tutorials.length})</h3>
         {tutorials.length === 0 ? (
